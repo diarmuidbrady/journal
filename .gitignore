@@ -1,0 +1,51 @@
+# Real journal data: never commit
+samples/
+exports/
+*.zip
+journal-export*.json
+
+# Recordings
+*.m4a
+*.aac
+*.caf
+*.wav
+*.mp3
+
+# Databases
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Model files
+*.gguf
+*.mlmodel
+*.mlmodelc/
+*.mlpackage/
+*.safetensors
+*.onnx
+*.bin
+
+# Secrets and signing
+.env
+.env.*
+Secrets*.xcconfig
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.keychain
+
+# Xcode and SwiftPM
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
+.build/
+.swiftpm/
+Packages/*/.swiftpm/
+
+# macOS
+.DS_Store
