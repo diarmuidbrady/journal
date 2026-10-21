@@ -85,6 +85,7 @@
 				A10000000000000000000060 /* Sources */,
 				A10000000000000000000040 /* Frameworks */,
 				A10000000000000000000070 /* Resources */,
+				A10000000000000000000009 /* Embed llama.framework (device only) */,
 			);
 			buildRules = (
 			);
@@ -152,6 +153,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A10000000000000000000005 /* XCLocalSwiftPackageReference "Packages/GRDB" */,
+				A10000000000000000000008 /* XCLocalSwiftPackageReference "Packages/LlamaCpp" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A10000000000000000000051 /* Products */;
@@ -180,6 +182,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A10000000000000000000009 /* Embed llama.framework (device only) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed llama.framework (device only)";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# llama.cpp ships no iOS Simulator slice, so it is linked and embedded for device builds only.\nif [ \"$PLATFORM_NAME\" != \"iphoneos\" ]; then exit 0; fi\nSRC=\"$LLAMA_FRAMEWORK_DIR/llama.framework\"\nDEST=\"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nrm -rf \"$DEST/llama.framework\"\ncp -R \"$SRC\" \"$DEST/\"\nif [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n  codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --preserve-metadata=identifier,entitlements \"$DEST/llama.framework\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A10000000000000000000060 /* Sources */ = {
@@ -273,9 +293,21 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Journal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(LLAMA_FRAMEWORK_DIR)",
+				);
+				LLAMA_FRAMEWORK_DIR = "$(BUILD_DIR)/../../SourcePackages/artifacts/llamacpp/llama/llama.xcframework/ios-arm64";
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"-framework",
+					llama,
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Journal;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -308,9 +340,21 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Journal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(LLAMA_FRAMEWORK_DIR)",
+				);
+				LLAMA_FRAMEWORK_DIR = "$(BUILD_DIR)/../../SourcePackages/artifacts/llamacpp/llama/llama.xcframework/ios-arm64";
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"-framework",
+					llama,
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Journal;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -408,6 +452,10 @@
 		A10000000000000000000005 /* XCLocalSwiftPackageReference "Packages/GRDB" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/GRDB;
+		};
+		A10000000000000000000008 /* XCLocalSwiftPackageReference "Packages/LlamaCpp" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/LlamaCpp;
 		};
 /* End XCLocalSwiftPackageReference section */
 

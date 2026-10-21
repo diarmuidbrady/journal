@@ -2,9 +2,10 @@
 
 A private, single-user journal for iPhone. Everything is processed and stored on the phone, in an encrypted database unlocked with Face ID. The build brief is [SPEC.md](SPEC.md).
 
-**Status:** phases 1–2 are built:
+**Status:** phases 1–3 are built:
 - **Vault:** app lock, encrypted database, typed entries, entry list, export.
 - **Voice:** recording with pause/resume and a waveform, and on-device transcription.
+- **Cleanup:** on-device AI cleanup with a review diff, using Qwen3.5-4B through llama.cpp.
 
 ## Install on the iPhone
 
@@ -30,13 +31,28 @@ xcrun devicectl device install app --device <identifier> build/Build/Products/Re
 
 Reinstalling over an existing install keeps the journal. **Deleting the app deletes the journal**, because its data is kept out of iCloud backups. Export first.
 
+### The AI model
+Cleanup needs the 2.7 GB model file. Either let the app download it (Settings → AI model, over Wi-Fi), or copy it from the Mac. The app checks its checksum the first time it finds it:
+```sh
+xcrun devicectl device copy to --device <identifier> --source Qwen3.5-4B-Q4_K_M.gguf \
+  --destination "Library/Application Support/Models/Qwen3.5-4B-Q4_K_M.gguf" \
+  --domain-type appDataContainer --domain-identifier com.diarmuidbrady.journal
+```
+The download URL and checksum are in `Journal/AI/ModelSpec.swift`.
+
 ## Development
 
 - Requires Xcode 26.3 or later; deployment target iOS 26.0.
 - Tests: `xcodebuild test -project Journal.xcodeproj -scheme Journal -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
 - Tests use invented sample entries only (`JournalTests/SampleEntries.swift`). Never add real journal text, exports or recordings to the repo.
 - Debug builds launched with `-seed-sample-entries` fill an empty journal with invented entries, for trying the UI in the simulator.
-- Dependencies: GRDB with SQLCipher, copied into `Packages/GRDB` (see [VENDORED.md](Packages/GRDB/VENDORED.md)). There are no others.
+- Debug builds launched with `-ai-benchmark` load the model, clean one invented entry, print timings and free memory, then exit. They never open the journal. Run it on the phone with: `xcrun devicectl device process launch --device <identifier> --console com.diarmuidbrady.journal -ai-benchmark`
+- **The AI model doesn't run in the Simulator:** llama.cpp ships no Simulator build. The app links it for device builds only, and in the Simulator, cleanup reports "not available".
+- **Cleanup quality check:** run `Tools/cleanup-quality.sh path/to/Qwen3.5-4B-Q4_K_M.gguf` on a Mac. It runs the real cleanup code over `JournalTests/Fixtures/cleanup-samples.json`.
+- Dependencies:
+  - GRDB with SQLCipher, copied into `Packages/GRDB` (see [VENDORED.md](Packages/GRDB/VENDORED.md)).
+  - llama.cpp's prebuilt XCFramework, pinned in `Packages/LlamaCpp`.
+  - There are no others.
 
 ## Layout
 
@@ -47,7 +63,9 @@ Journal/
   Storage/    Encrypted database, Entry/Category models, EntryStore
   Export/     Zip export (JSON + audio)
   Voice/      Recorder, player, on-device transcription, waveform
+  AI/         TextModel, llama.cpp runner, model download, cleanup, diff
+Tools/        Cleanup quality check (runs on a Mac)
   Features/   Lock, EntryList, EntryEditor, Settings screens
 JournalTests/ Unit tests (Swift Testing)
-Packages/GRDB GRDB 7.11.1 configured for SQLCipher
+Packages/     GRDB (with SQLCipher), llama.cpp
 ```

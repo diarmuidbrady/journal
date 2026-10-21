@@ -87,6 +87,31 @@ Everything is processed inside the phone; the two optional (dashed) links carry 
 
 **The current phone (iPhone 15, non-Pro) does not support Apple Intelligence**, so on it the open-weight model is the only option. It has 6 GB of RAM, shared with iOS, so phase 3 must check that the chosen 3–4B 4-bit model (about 2–2.5 GB) loads and runs without being killed for memory. If it doesn't, drop to a smaller model.
 
+**Chosen model (phase 3, 2026-10-21): Qwen3.5-4B, Q4_K_M quantisation (2.74 GB, Apache 2.0).**
+- **Source:** the Unsloth GGUF build (`unsloth/Qwen3.5-4B-GGUF`), pinned to commit `e87f1764…` with SHA-256 `00fe7986…` (full values in `Journal/AI/ModelSpec.swift`). Qwen publishes no official GGUF.
+- **Thinking:** Qwen3.5's "thinking" is switched off with an empty think block, so it answers directly.
+- **Candidates checked on Hugging Face** for a current 3–4B instruct model:
+  - Qwen3.5-4B (March 2026)
+  - Ministral 3 3B Instruct 2512 (Mistral's official GGUF, 2.15 GB)
+  - Gemma 4 E4B (Google's official QAT GGUF), ruled out at 5.15 GB
+  - Llama 3.2 3B, older than the rest
+- **Quality check:** both finalists were run on the 10 invented test entries with the real cleanup code (`Tools/cleanup-quality.sh`).
+  - **Ministral** rewrote in a formal voice and changed meaning. For example, "I didn't think I'd last two minutes" became "I had expected to struggle for only two minutes".
+  - **Qwen** kept 71 of 77 must-keep names, numbers and negations. Four of the six misses are format changes ("3:15" for "three fifteen", "2 pm", "Dr.", "not looking"). The other two are small slips ("haven't" became "hadn't"; "I don't know" was dropped), which the review screen flags.
+- **On the iPhone 15:**
+
+  | Step | Result |
+  | --- | --- |
+  | Verify checksum | 3.1 s |
+  | Load model | 6.4 s |
+  | Memory used | About 250 MB (weights are memory-mapped), with 4 GB available under the increased-memory entitlement |
+  | Clean one 445-character paragraph | 10 s (about 9 tokens/s) |
+
+**Runtime: llama.cpp release b11457** (2026-10-06), the official prebuilt XCFramework pinned by URL and checksum in `Packages/LlamaCpp`.
+- llama.cpp publishes no iOS Simulator slice. So the app links and embeds it only for device builds, using SDK-conditional build settings and a script phase. In the Simulator, the runner is a stand-in that reports "not available".
+- The app has the `com.apple.developer.kernel.increased-memory-limit` entitlement.
+- The model is freed from memory whenever the app goes to the background.
+
 **Optional home server (deferred: decide after phase 5).** For heavier questions across many entries, the app may call a larger open-weight model running on my own computer (Ollama or llama.cpp server), reached only over a private VPN such as Tailscale. Off by default; the phone model must handle everything on its own. Not built unless chosen after phase 5; keep `TextModel` swappable so it can be added.
 
 **Optional encrypted backup.** Two options were considered. **Decided (2026-10-21): option 1, encrypted file export.** Supabase is not being built and is kept below for reference only.
@@ -94,7 +119,7 @@ Everything is processed inside the phone; the two optional (dashed) links carry 
 1. **Encrypted file export** to iCloud Drive / Files. Simplest, no backend.
 2. **Supabase** as a blob store. Each entry is serialised to JSON, encrypted on the phone with XChaCha20-Poly1305 (libsodium), and uploaded as one row. The key comes from a passphrase via Argon2id and is stored in the Keychain/Keystore; a recovery phrase is shown once at setup. Enable Row Level Security and never ship the service-role key in the app. Note the free tier pauses projects after 7 days of inactivity ([Jet Admin](https://www.jetadmin.io/blog/supabase-review/)), so the app must tolerate a paused backend and retry later.
 
-**Security baseline.** App lock with biometrics and passcode fallback on every launch and after 1 minute in the background. The fallback is the device passcode (no separate app PIN). Blur the app in the task switcher. Audio files stored with iOS Data Protection "complete". No third-party SDKs, analytics or crash reporters. Network access only for the one-time model download, Apple's one-time speech model download through iOS (phase 2), the optional backup and the home server.
+**Security baseline.** App lock with biometrics and passcode fallback on every launch and after 1 minute in the background. The fallback is the device passcode (no separate app PIN). Blur the app in the task switcher. Audio files stored with iOS Data Protection "complete". No third-party SDKs, analytics or crash reporters. Network access only for the one-time AI model download from its pinned Hugging Face URL (Wi-Fi only, phase 3), Apple's one-time speech model download through iOS (phase 2), the optional backup and the home server.
 
 **As built in phase 1:**
 - The database key is 256 random bits, stored in the Keychain as `WhenUnlockedThisDeviceOnly` with the `.userPresence` access control (Face ID or device passcode). The app never sees the key until you unlock.
@@ -151,6 +176,31 @@ Six features, built in the order listed; importing old journals has its own sect
 - Show the result as a side-by-side or inline diff against the original. I can accept, edit, or discard.
 - Both versions are stored. The entry shows the cleaned version by default with a toggle to the original.
 - Long entries are cleaned in paragraph-sized chunks so they fit the small model's context.
+
+**As built in phase 3 (2026-10-21):**
+
+*How cleanup runs*
+- "Clean up" sits beside the microphone. It always cleans the **original** text.
+- Chunks are whole paragraphs grouped up to about 1,200 characters. Long unbroken transcripts are split at sentence ends.
+- Each chunk gets the spec's cleanup prompt (`cleanup-v1`) at temperature 0.2, with a 4,096-token context. A progress panel shows "part N of M" and the text as it streams, with a Cancel button.
+- Cleanup is cancelled if the app goes to the background, because iOS doesn't allow GPU work there.
+
+*Reviewing and storing the result*
+- The review sheet has three tabs: **Changes** (inline word diff: removed words struck through in red, added words in green), **Cleaned** (editable) and **Original**. Accept or Discard.
+- Above the tabs, a "check these" box lists possible lost facts, found by an automatic check:
+  - names, using Apple's on-device NaturalLanguage name tagger plus capitalised words
+  - numbers
+  - fewer negations ("not", "never", "-n't")
+- Accepting stores `cleaned_text`, sets `show_cleaned`, and records `ai_version` as `cleanup-v1;<model id>`.
+- The entry then has a Cleaned / Original switch, and the switch edits whichever version is shown.
+- Cleaning again replaces the cleaned version after a confirmation.
+- A new recording's transcript is appended to both versions, still uncleaned, until you clean up again.
+
+*The model download*
+- Settings → AI model downloads the model from its pinned URL, over Wi-Fi only (cellular and hotspots are refused), and keeps the screen awake while it runs.
+- The file is verified against its SHA-256, and a corrupt file is deleted.
+- A model file already present at the expected size, for example one copied in with `devicectl`, is verified the first time it's found.
+- The model lives in `Application Support/Models`, excluded from backup.
 
 ### 4. Ask the journal
 
@@ -373,6 +423,8 @@ Text:
 
 **Quality check.** Build a small test set of 10 rambling sample entries (written for testing, not real ones). For cleanup, verify that names, numbers and negations ("didn't", "never") survive. If the chosen model drops facts, try a larger model before rewriting prompts.
 
+*Built:* `JournalTests/Fixtures/cleanup-samples.json` holds the 10 invented entries, each with its must-keep items. `Tools/cleanup-quality.sh <model.gguf>` runs the app's real cleanup code with llama.cpp on a Mac and writes a report. Re-run it whenever the prompt or model changes. Results for the chosen model are under Model choice.
+
 ## Installation on my phone only
 
 The app is never published to a store; it is installed directly from my computer.
@@ -380,7 +432,7 @@ The app is never published to a store; it is installed directly from my computer
 - **iPhone:** build and install from Xcode on a Mac. With a free Apple ID the install expires after 7 days and must be re-run from Xcode. The paid Apple Developer Program (US$99/year) makes installs last a year and allows TestFlight. Document both in the README.
 - Installs are signed with the paid developer team (C8DY3M4VMH), so they last a year. Xcode 26.3 on the build Mac installs fine onto the phone's iOS 26.6.2 (checked 2026-10-21). Step-by-step instructions are in `README.md`.
 - **Android (not being built, kept for reference):** build a signed release APK and install it via USB (`adb install`) or by allowing "install unknown apps" for the file manager once. No expiry.
-- The model file (2–3 GB) is downloaded once over Wi-Fi on first launch from a pinned URL with a checksum check, or copied in during install. After that the app needs no network.
+- The model file (2–3 GB) is downloaded once over Wi-Fi on first launch from a pinned URL with a checksum check, or copied in during install. After that the app needs no network. *As built:* the download starts from Settings → AI model, or from the prompt when you first tap Clean up. To copy it in instead, see README.md.
 
 ## Build phases and open decisions
 
@@ -388,7 +440,7 @@ Build in seven phases; each ends with something usable on the phone.
 
 1. **Vault:** app lock, encrypted database, typed entries, entry list, export. *(Built 2026-10-21.)*
 2. **Voice:** recording and on-device transcription. *(Built 2026-10-21.)*
-3. **Cleanup:** model runtime behind `TextModel`, cleanup prompt, diff view.
+3. **Cleanup:** model runtime behind `TextModel`, cleanup prompt, diff view. *(Built 2026-10-21.)*
 4. **Mood and categories:** mood, summary, themes and categories on save; month calendar; category filter.
 5. **Ask:** embeddings, retrieval, Q&A screen, saved reflections.
 6. **Import:** text/Markdown files first, then Notion, then Apple Notes, then photos with text recognition.

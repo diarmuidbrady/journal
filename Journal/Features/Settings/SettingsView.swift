@@ -6,6 +6,7 @@ struct SettingsView: View {
 
     @Environment(Vault.self) private var vault
     @Environment(SpeechModel.self) private var speechModel
+    @Environment(ModelStore.self) private var modelStore
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -35,6 +36,15 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    LabeledContent("Model", value: modelStore.spec.displayName)
+                    aiModelRow
+                } header: {
+                    Text("AI model")
+                } footer: {
+                    Text("Cleanup runs on this iPhone. The model is a one-time \(ByteCountFormatter.string(fromByteCount: modelStore.spec.sizeBytes, countStyle: .file)) download over Wi-Fi from Hugging Face, checked against a fixed checksum. No journal text is sent. Licence: \(modelStore.spec.licence).")
+                }
+
+                Section {
                     speechModelRow
                 } header: {
                     Text("Voice")
@@ -44,7 +54,7 @@ struct SettingsView: View {
 
                 Section("Privacy") {
                     VStack(alignment: .leading, spacing: 8) {
-                        PrivacyPoint("Everything stays on this iPhone, including transcription. The app itself makes no network requests.")
+                        PrivacyPoint("Everything stays on this iPhone, including transcription and AI cleanup. The only network request the app makes is the one-time AI model download.")
                         PrivacyPoint("The database is encrypted with a key that only Face ID or your passcode can unlock.")
                         PrivacyPoint("Journal data is left out of iCloud device backups. Export regularly to keep your own copy.")
                         PrivacyPoint("No analytics, crash reporting or third-party services.")
@@ -64,6 +74,40 @@ struct SettingsView: View {
                 }
             }
             .task { await speechModel.refresh() }
+        }
+    }
+
+    @ViewBuilder
+    private var aiModelRow: some View {
+        switch modelStore.status {
+        case .checking:
+            LabeledContent("Status", value: "Checking…")
+        case .notDownloaded:
+            Button("Download model", systemImage: "arrow.down.circle") { modelStore.download() }
+        case .downloading(let fraction):
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Downloading \(fraction.formatted(.percent.precision(.fractionLength(0))))")
+                    Spacer()
+                    Button("Cancel") { modelStore.cancelDownload() }
+                }
+                ProgressView(value: fraction)
+                Text("Keep Journal open until it finishes.").font(.caption).foregroundStyle(.secondary)
+            }
+        case .verifying:
+            LabeledContent("Status") {
+                HStack { ProgressView(); Text("Verifying…") }
+            }
+        case .ready:
+            LabeledContent("Status", value: "Ready")
+            Button("Delete model", systemImage: "trash", role: .destructive) {
+                Task { await modelStore.deleteModel() }
+            }
+        case .failed(let message):
+            VStack(alignment: .leading) {
+                Button("Retry download", systemImage: "arrow.clockwise") { modelStore.download() }
+                Text(message).font(.caption).foregroundStyle(.red)
+            }
         }
     }
 

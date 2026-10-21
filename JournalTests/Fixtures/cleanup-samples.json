@@ -1,0 +1,52 @@
+[
+  {
+    "id": "bakery",
+    "text": "So um, today was, today was a lot. The ovens broke again at like six am, and Maeve didn't show up, she didn't even text, which is, you know, not like her. I had to do the whole morning bake by myself, like forty croissants and the sourdough, and I kind of, I kind of panicked a bit honestly. I never want to do that again. Anyway Tom from next door came in around nine and helped me carry the trays and I was so grateful, I mean really grateful.",
+    "must_keep": ["Maeve", "Tom", "didn't", "never", "forty", "nine", "grateful"]
+  },
+  {
+    "id": "swim",
+    "text": "Okay so I went to the Forty Foot this morning with Aoife and uh it was freezing, like properly freezing, the water was I think nine degrees. I didn't think I'd last two minutes but I did, I did like four minutes in the end. Afterwards we got coffee and, um, she told me she's moving to Lisbon in March. I'm happy for her but I'm also, I don't know, I'm sad about it. I'm not ready for her to go.",
+    "must_keep": ["Aoife", "Lisbon", "March", "nine degrees", "didn't", "not ready", "sad", "Forty Foot"]
+  },
+  {
+    "id": "work-review",
+    "text": "Had my review with Siobhan today. Um. It went, it went fine I guess? She said the Henderson project was the best thing I did this year but that I need to, like, speak up more in meetings. Which is fair. Which is fair, I know I don't. The raise is three percent which is basically nothing with inflation. I'm not going to argue about it though. Or maybe I should. I don't know.",
+    "must_keep": ["Siobhan", "Henderson", "three percent", "don't", "not going to argue", "I don't know"]
+  },
+  {
+    "id": "gran",
+    "text": "Gran's ninety-one today. Ninety-one! We all went over to hers in Kilkenny, me, Dad, Cian and the twins. She beat everyone at twenty-five again, like she always does, she's never lost a game I swear. Dad got a bit emotional during the cake, he doesn't usually, you know, show that kind of thing. I kind of wanted to say something to him after but I didn't. I wish I had.",
+    "must_keep": ["ninety-one", "Kilkenny", "Dad", "Cian", "twins", "never", "didn't", "wish I had"]
+  },
+  {
+    "id": "anxiety",
+    "text": "I couldn't sleep again, um, woke up at like three fifteen and just lay there. My brain was just going over the, the conversation with Rory over and over. I keep thinking I said something wrong but I don't think I actually did? Like I don't think I did. I'm going to try not to drink coffee after two pm for a week and see if that helps. Also, also I should probably call Dr Byrne about it if it doesn't stop.",
+    "must_keep": ["Rory", "Dr Byrne", "three fifteen", "two pm", "couldn't", "don't think", "not to drink coffee", "doesn't stop"]
+  },
+  {
+    "id": "money",
+    "text": "So the car needs a new clutch and the garage said it's eight hundred and fifty euro. Eight fifty. Which, um, I don't have right now, not without touching the holiday savings. I really really don't want to touch that. I guess I could, I could ask Mam for a loan but I hate doing that, I've never paid her back properly for the last time. Ugh. Okay. I'll ring the other garage in Bray tomorrow and get a second quote.",
+    "must_keep": ["eight hundred and fifty", "Mam", "Bray", "don't have", "don't want", "never paid", "second quote"]
+  },
+  {
+    "id": "dream",
+    "text": "Weird dream last night. I was back in school, in Mr Kavanagh's maths class, and I hadn't done the homework, and um the classroom kept, like, flooding? Slowly. And nobody else noticed. Nobody. And then my phone rang and it was Jess, who I haven't spoken to in, what, six years? And I woke up before I answered. I felt kind of uneasy all morning, not scared exactly, just uneasy.",
+    "must_keep": ["Mr Kavanagh", "Jess", "six years", "hadn't", "nobody", "haven't", "not scared", "uneasy"]
+  },
+  {
+    "id": "run",
+    "text": "Ran ten k today! First time ever. Um, it took me one hour and four minutes which isn't fast but I don't care, I did it. My knee was sore around kilometre seven but it, it was fine after. Niamh's training plan is actually working. Like it's actually working. I didn't believe her when she said twelve weeks would be enough. Next goal is the Dublin half in May. Maybe. Let's not get ahead of ourselves.",
+    "must_keep": ["ten k", "one hour and four minutes", "kilometre seven", "Niamh", "twelve weeks", "Dublin", "May", "isn't fast", "don't care", "didn't believe"]
+  },
+  {
+    "id": "argument",
+    "text": "Had a fight with Conor about the, about the wedding. He wants it in Galway, near his family, and I want something small in Wicklow. It's not even about the place really, I mean it is but it isn't. It's that I feel like he never asks what I want, he just, he just assumes. I said that and he went quiet. We didn't really resolve anything. I'm not angry anymore, I'm just tired.",
+    "must_keep": ["Conor", "Galway", "Wicklow", "never asks", "didn't", "not angry", "tired", "went quiet"]
+  },
+  {
+    "id": "gratitude",
+    "text": "Three things I'm grateful for today. Um, one, the sun came out at lunch and I sat in Herbert Park for like twenty minutes, didn't look at my phone once. Two, Priya sent me a voice note just to say she was thinking of me, which, that meant a lot actually. And three, I don't know, the soup I made was actually really good? Lentil and, and cumin. I'd make it again. That's it. That's the list.",
+    "must_keep": ["Herbert Park", "twenty minutes", "Priya", "didn't look", "lentil", "cumin", "don't know"]
+  }
+]

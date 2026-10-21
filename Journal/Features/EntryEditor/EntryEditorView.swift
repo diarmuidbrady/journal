@@ -3,11 +3,14 @@ import SwiftUI
 struct EntryEditorView: View {
     @State private var model: EntryEditorModel
     @Environment(SpeechModel.self) private var speechModel
+    @Environment(ModelStore.self) private var modelStore
     @Environment(\.scenePhase) private var scenePhase
     @FocusState private var bodyFocused: Bool
     @State private var confirmingModelDownload = false
     @State private var confirmingRetranscribe = false
     @State private var confirmingDeleteRecording = false
+    @State private var confirmingRecleanup = false
+    @State private var showingModelNeeded = false
 
     init(store: EntryStore, entry: Entry, isNew: Bool) {
         _model = State(initialValue: EntryEditorModel(store: store, entry: entry, isPersisted: !isNew))
@@ -34,13 +37,24 @@ struct EntryEditorView: View {
             }
 
             transcriptionStatus
+            cleanupStatus
 
-            TextEditor(text: $model.text)
+            if model.cleanedText != nil {
+                Picker("Version", selection: $model.showCleaned) {
+                    Text("Cleaned").tag(true)
+                    Text("Original").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.isCleaning)
+            }
+
+            TextEditor(text: $model.visibleText)
                 .focused($bodyFocused)
                 .font(.body)
                 .scrollContentBackground(.hidden)
+                .disabled(model.isCleaning)
                 .overlay(alignment: .topLeading) {
-                    if model.text.isEmpty {
+                    if model.visibleText.isEmpty {
                         Text("Write, or tap the microphone to talk…")
                             .foregroundStyle(.tertiary)
                             .padding(.top, 8)
@@ -74,6 +88,9 @@ struct EntryEditorView: View {
             case .background where model.isRecording:
                 // Without background audio the recorder can't continue, so keep what we have.
                 Task { await model.stopRecording() }
+            case .background where model.isCleaning:
+                // iOS doesn't allow GPU work in the background.
+                model.cancelCleanup()
             case .inactive, .background:
                 model.player.pause()
                 Task { await model.flush() }
@@ -100,6 +117,46 @@ struct EntryEditorView: View {
         } message: {
             Text("The entry's text is kept. The audio can't be recovered.")
         }
+        .confirmationDialog("Clean up again?", isPresented: $confirmingRecleanup, titleVisibility: .visible) {
+            Button("Clean up the original again") { runCleanup() }
+        } message: {
+            Text("This cleans the original text again. If you accept, it replaces the current cleaned version, including any edits you made to it.")
+        }
+        .alert("Download the AI model first", isPresented: $showingModelNeeded) {
+            Button("Download now (\(modelSize))") { modelStore.download() }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text("Cleanup runs on this iPhone with \(modelStore.spec.displayName). It's a one-time \(modelSize) download over Wi-Fi from Hugging Face. Keep Journal open while it downloads. Progress is in Settings.")
+        }
+        .sheet(item: $model.cleanupReview) { review in
+            CleanupReviewView(review: review) { cleaned in
+                Task { await model.acceptCleanup(cleaned, aiVersion: review.result.aiVersion) }
+            } onDiscard: {
+                model.discardCleanup()
+            }
+        }
+    }
+
+    private var modelSize: String {
+        ByteCountFormatter.string(fromByteCount: modelStore.spec.sizeBytes, countStyle: .file)
+    }
+
+    private func cleanupTapped() {
+        guard modelStore.status == .ready, modelStore.textModel != nil else {
+            showingModelNeeded = true
+            return
+        }
+        if model.cleanedText != nil {
+            confirmingRecleanup = true
+        } else {
+            runCleanup()
+        }
+    }
+
+    private func runCleanup() {
+        guard let textModel = modelStore.textModel else { return }
+        bodyFocused = false
+        model.startCleanup(model: textModel)
     }
 
     private func micTapped() {
@@ -121,6 +178,10 @@ struct EntryEditorView: View {
             RecorderPanel(recorder: model.recorder) {
                 Task { await model.stopRecording() }
             }
+        } else if case .running(let chunk, let count, let partial) = model.cleanup {
+            CleanupPanel(chunk: chunk, count: count, partial: partial) {
+                model.cancelCleanup()
+            }
         } else {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -132,6 +193,13 @@ struct EntryEditorView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 Spacer()
+                Button(action: cleanupTapped) {
+                    Label("Clean up", systemImage: "wand.and.stars")
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .disabled(!model.canCleanUp)
                 Button(action: micTapped) {
                     Image(systemName: "mic.fill")
                         .font(.title2)
@@ -139,7 +207,7 @@ struct EntryEditorView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.circle)
-                .disabled(model.isTranscribing)
+                .disabled(model.isTranscribing || model.isCleaning)
                 .accessibilityLabel("Record")
             }
             .padding(.horizontal)
@@ -165,6 +233,21 @@ struct EntryEditorView: View {
                     .foregroundStyle(.orange)
                 Spacer()
                 Button("Dismiss", systemImage: "xmark") { model.dismissTranscriptionError() }
+                    .labelStyle(.iconOnly)
+                    .font(.caption)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var cleanupStatus: some View {
+        if case .failed(let message) = model.cleanup {
+            HStack(alignment: .top) {
+                Label("Cleanup failed: \(message)", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                Spacer()
+                Button("Dismiss", systemImage: "xmark") { model.dismissCleanupError() }
                     .labelStyle(.iconOnly)
                     .font(.caption)
             }
@@ -230,6 +313,34 @@ private struct RecorderPanel: View {
                 .tint(.red)
                 .accessibilityLabel("Stop and transcribe")
             }
+        }
+        .padding()
+        .background(.bar)
+    }
+}
+
+/// Progress, live output and cancel while the model cleans up the entry.
+private struct CleanupPanel: View {
+    let chunk: Int
+    let count: Int
+    let partial: String
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                ProgressView()
+                Text(count > 1 ? "Cleaning up on this iPhone · part \(chunk + 1) of \(count)" : "Cleaning up on this iPhone…")
+                    .font(.subheadline)
+                Spacer()
+                Button("Cancel", action: onCancel)
+            }
+            ProgressView(value: Double(chunk), total: Double(max(count, 1)))
+            Text(partial.isEmpty ? "Reading…" : partial)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3, reservesSpace: true)
+                .truncationMode(.head)
         }
         .padding()
         .background(.bar)
