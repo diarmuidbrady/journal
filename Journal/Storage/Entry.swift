@@ -111,6 +111,7 @@ extension Entry: FetchableRecord, PersistableRecord {
         static let entryDate = Column("entry_date")
         static let createdAt = Column("created_at")
         static let needsAnalysis = Column("needs_analysis")
+        static let embedding = Column("embedding")
         static let id = Column("id")
     }
 

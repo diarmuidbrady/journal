@@ -21,6 +21,40 @@ enum Prompts {
         """
     }
 
+    /// Entries are embedded as their text (excerpted like the analysis input).
+    static let embeddingVersion = "embedding-v1"
+
+    static let askVersion = "ask-v1"
+
+    static func ask(_ question: String, context: String) -> String {
+        """
+        You help me reflect on my own journal. Answer my question using only the entries below.
+        Be direct and specific. Point out patterns, contradictions and things I may be avoiding when the entries support it.
+        If the entries do not contain enough to answer, say so.
+        After each point, cite the entry date in brackets, e.g. [YYYY-MM-DD].
+        Keep the whole answer under 200 words.
+
+        Entries (date: text or summary):
+        \(context)
+
+        Question: \(question)
+        """
+    }
+
+    /// Used when the material doesn't fit: each batch is reduced to notes first.
+    static func askBatch(_ question: String, entries: String) -> String {
+        """
+        Here are some of my journal entries. Write short notes on everything in them that helps answer the question below: facts, feelings, patterns and contradictions.
+        End each note with the entry date in brackets, e.g. [YYYY-MM-DD].
+        If nothing is relevant, reply only: Nothing relevant.
+
+        Entries:
+        \(entries)
+
+        Question: \(question)
+        """
+    }
+
     static let analysisVersion = "analysis-v1"
 
     static func analysis(_ text: String, categories: [String]) -> String {

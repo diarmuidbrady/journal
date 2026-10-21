@@ -2,21 +2,24 @@ import CoreTransferable
 import Foundation
 import UniformTypeIdentifiers
 
-/// The plain JSON export: every entry with every column, plus the category list.
+/// The plain JSON export: every entry with every column, the category list and saved
+/// reflections. Schema 2 added reflections.
 struct JournalExport: Codable, Sendable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     var format = "journal-export"
     var schemaVersion = JournalExport.currentSchemaVersion
     var exportedAt: Date
     var entries: [Entry]
     var categories: [Category]
+    var reflections: [Reflection]
 
     static func make(from store: EntryStore, now: Date = .now) async throws -> JournalExport {
         JournalExport(
             exportedAt: now,
             entries: try await store.fetchAll(),
-            categories: try await store.categories()
+            categories: try await store.categories(),
+            reflections: try await store.reflections()
         )
     }
 

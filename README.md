@@ -2,11 +2,12 @@
 
 A private, single-user journal for iPhone. Everything is processed and stored on the phone, in an encrypted database unlocked with Face ID. The build brief is [SPEC.md](SPEC.md).
 
-**Status:** phases 1–4 are built:
+**Status:** phases 1–5 are built:
 - **Vault:** app lock, encrypted database, typed entries, entry list, export.
 - **Voice:** recording with pause/resume and a waveform, and on-device transcription.
 - **Cleanup:** on-device AI cleanup with a review diff, using Qwen3.5-4B through llama.cpp.
 - **Mood and categories:** background mood, summary, themes and categories; the mood calendar; the category filter; manual overrides.
+- **Ask:** questions about an entry, a date range or all entries, with tappable dated citations and saved reflections.
 
 ## Install on the iPhone
 
@@ -32,8 +33,9 @@ xcrun devicectl device install app --device <identifier> build/Build/Products/Re
 
 Reinstalling over an existing install keeps the journal. **Deleting the app deletes the journal**, because its data is kept out of iCloud backups. Export first.
 
-### The AI model
-Cleanup needs the 2.7 GB model file. Either let the app download it (Settings → AI model, over Wi-Fi), or copy it from the Mac. The app checks its checksum the first time it finds it:
+### The AI models
+Cleanup, mood and answers need the 2.7 GB text model. "All entries" search needs the 639 MB search model (`Qwen3-Embedding-0.6B-Q8_0.gguf`); copy it the same way, with its file name.
+For the text model: Either let the app download it (Settings → AI model, over Wi-Fi), or copy it from the Mac. The app checks its checksum the first time it finds it:
 ```sh
 xcrun devicectl device copy to --device <identifier> --source Qwen3.5-4B-Q4_K_M.gguf \
   --destination "Library/Application Support/Models/Qwen3.5-4B-Q4_K_M.gguf" \
@@ -52,6 +54,7 @@ The download URL and checksum are in `Journal/AI/ModelSpec.swift`.
 - **Model checks on a Mac:** these run the app's real AI code with llama.cpp over `JournalTests/Fixtures/cleanup-samples.json`.
   - `Tools/cleanup-quality.sh path/to/Qwen3.5-4B-Q4_K_M.gguf` checks that cleanup keeps names, numbers and negations.
   - `Tools/analysis-check.sh path/to/Qwen3.5-4B-Q4_K_M.gguf` prints the mood, categories and summary for each sample.
+  - `Tools/ask-check.sh path/to/Qwen3.5-4B-Q4_K_M.gguf path/to/Qwen3-Embedding-0.6B-Q8_0.gguf` checks retrieval and one cited answer.
 - `-open-tab mood` (debug builds only) starts on the Mood tab.
 - Dependencies:
   - GRDB with SQLCipher, copied into `Packages/GRDB` (see [VENDORED.md](Packages/GRDB/VENDORED.md)).
@@ -69,6 +72,7 @@ Journal/
   Voice/      Recorder, player, on-device transcription, waveform
   AI/         TextModel, llama.cpp runner, model download, cleanup, diff
   Features/Mood/  Mood calendar, colour scale, month summary
+  Features/Ask/   Ask screen, saved reflections
 Tools/        Model checks that run on a Mac (cleanup quality, analysis)
   Features/   Lock, EntryList, EntryEditor, Settings screens
 JournalTests/ Unit tests (Swift Testing)

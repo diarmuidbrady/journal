@@ -12,6 +12,7 @@ struct EntryEditorView: View {
     @State private var confirmingDeleteRecording = false
     @State private var confirmingRecleanup = false
     @State private var showingModelNeeded = false
+    @State private var askingAboutEntry = false
 
     private let store: EntryStore
 
@@ -81,18 +82,28 @@ struct EntryEditorView: View {
             ToolbarItem(placement: .principal) {
                 saveStatus
             }
+            if model.isPersisted {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Ask about this entry", systemImage: "sparkles") { askingAboutEntry = true }
+                        .disabled(model.isRecording || model.isCleaning || model.isTranscribing)
+                }
+            }
+        }
+        .sheet(isPresented: $askingAboutEntry) {
+            AskView(store: store, entryID: model.entry.id)
+                .onAppear { Task { await model.flush() } }
         }
         .onAppear {
             if model.isNew { bodyFocused = true }
             // Background analysis waits while an entry is open, so it never competes
             // with typing, recording or cleanup, and runs once the entry is finished.
-            analysisQueue.editorOpened()
+            analysisQueue.pause()
         }
         .task { await speechModel.refresh() }
         .onDisappear {
             Task {
                 if model.isRecording { await model.stopRecording() } else { await model.flush() }
-                analysisQueue.editorClosed()
+                analysisQueue.resume()
             }
         }
         .onChange(of: scenePhase) { _, phase in

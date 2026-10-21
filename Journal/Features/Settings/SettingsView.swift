@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(Vault.self) private var vault
     @Environment(SpeechModel.self) private var speechModel
     @Environment(ModelStore.self) private var modelStore
+    @Environment(\.embeddingStore) private var embeddingStore
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -42,12 +43,14 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    LabeledContent("Model", value: modelStore.spec.displayName)
-                    aiModelRow
+                    ModelRows(store: modelStore, purpose: "Writing: cleanup, mood, answers")
+                    if let embeddingStore {
+                        ModelRows(store: embeddingStore, purpose: "Search: Ask about all entries")
+                    }
                 } header: {
-                    Text("AI model")
+                    Text("AI models")
                 } footer: {
-                    Text("Cleanup runs on this iPhone. The model is a one-time \(ByteCountFormatter.string(fromByteCount: modelStore.spec.sizeBytes, countStyle: .file)) download over Wi-Fi from Hugging Face, checked against a fixed checksum. No journal text is sent. Licence: \(modelStore.spec.licence).")
+                    Text("Both run on this iPhone. Each is a one-time download over Wi-Fi from Hugging Face, checked against a fixed checksum. No journal text is sent. Licence: Apache 2.0.")
                 }
 
                 Section {
@@ -60,7 +63,7 @@ struct SettingsView: View {
 
                 Section("Privacy") {
                     VStack(alignment: .leading, spacing: 8) {
-                        PrivacyPoint("Everything stays on this iPhone, including transcription and AI cleanup. The only network request the app makes is the one-time AI model download.")
+                        PrivacyPoint("Everything stays on this iPhone, including transcription, AI cleanup and answers. The only network requests the app makes are the one-time AI model downloads.")
                         PrivacyPoint("The database is encrypted with a key that only Face ID or your passcode can unlock.")
                         PrivacyPoint("Journal data is left out of iCloud device backups. Export regularly to keep your own copy.")
                         PrivacyPoint("No analytics, crash reporting or third-party services.")
@@ -80,40 +83,6 @@ struct SettingsView: View {
                 }
             }
             .task { await speechModel.refresh() }
-        }
-    }
-
-    @ViewBuilder
-    private var aiModelRow: some View {
-        switch modelStore.status {
-        case .checking:
-            LabeledContent("Status", value: "Checking…")
-        case .notDownloaded:
-            Button("Download model", systemImage: "arrow.down.circle") { modelStore.download() }
-        case .downloading(let fraction):
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Downloading \(fraction.formatted(.percent.precision(.fractionLength(0))))")
-                    Spacer()
-                    Button("Cancel") { modelStore.cancelDownload() }
-                }
-                ProgressView(value: fraction)
-                Text("Keep Journal open until it finishes.").font(.caption).foregroundStyle(.secondary)
-            }
-        case .verifying:
-            LabeledContent("Status") {
-                HStack { ProgressView(); Text("Verifying…") }
-            }
-        case .ready:
-            LabeledContent("Status", value: "Ready")
-            Button("Delete model", systemImage: "trash", role: .destructive) {
-                Task { await modelStore.deleteModel() }
-            }
-        case .failed(let message):
-            VStack(alignment: .leading) {
-                Button("Retry download", systemImage: "arrow.clockwise") { modelStore.download() }
-                Text(message).font(.caption).foregroundStyle(.red)
-            }
         }
     }
 
@@ -162,5 +131,50 @@ private extension Bundle {
         let version = infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let build = infoDictionary?["CFBundleVersion"] as? String ?? "?"
         return "\(version) (\(build))"
+    }
+}
+
+/// Name, size, status and download controls for one model.
+private struct ModelRows: View {
+    let store: ModelStore
+    let purpose: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(store.spec.displayName)
+            Text("\(purpose) · \(ByteCountFormatter.string(fromByteCount: store.spec.sizeBytes, countStyle: .file))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        switch store.status {
+        case .checking:
+            LabeledContent("Status", value: "Checking…")
+        case .notDownloaded:
+            Button("Download", systemImage: "arrow.down.circle") { store.download() }
+        case .downloading(let fraction):
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Downloading \(fraction.formatted(.percent.precision(.fractionLength(0))))")
+                    Spacer()
+                    Button("Cancel") { store.cancelDownload() }
+                }
+                ProgressView(value: fraction)
+                Text("Keep Journal open until it finishes.").font(.caption).foregroundStyle(.secondary)
+            }
+        case .verifying:
+            LabeledContent("Status") {
+                HStack { ProgressView(); Text("Verifying…") }
+            }
+        case .ready:
+            LabeledContent("Status", value: "Ready")
+            Button("Delete", systemImage: "trash", role: .destructive) {
+                Task { await store.deleteModel() }
+            }
+        case .failed(let message):
+            VStack(alignment: .leading) {
+                Button("Retry download", systemImage: "arrow.clockwise") { store.download() }
+                Text(message).font(.caption).foregroundStyle(.red)
+            }
+        }
     }
 }

@@ -90,6 +90,22 @@ final class AppDatabase: Sendable {
             try db.create(index: "entries_on_needs_analysis", on: "entries", columns: ["needs_analysis"])
         }
 
+        migrator.registerMigration("v3: reflections") { db in
+            // SPEC.md, Data model, plus the category filter and ai_version of the answer.
+            try db.create(table: "reflections") { t in
+                t.primaryKey("id", .text)
+                t.column("created_at", .datetime).notNull()
+                t.column("question", .text).notNull()
+                t.column("answer", .text).notNull()
+                t.column("scope", .text).notNull()
+                t.column("range_start", .text)
+                t.column("range_end", .text)
+                t.column("category", .text)
+                t.column("cited_entry_ids", .text).notNull().defaults(to: "[]")
+                t.column("ai_version", .text)
+            }
+        }
+
         return migrator
     }
 }

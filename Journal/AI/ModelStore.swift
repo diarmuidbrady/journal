@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import os
+import SwiftUI
 import UIKit
 
 /// Downloads, verifies and holds the on-device text model (SPEC.md, Installation).
@@ -20,7 +21,10 @@ final class ModelStore {
     let spec: ModelSpec
     let directory: URL
     private(set) var status: Status = .checking
+    /// Set once the file is verified, for a text model spec.
     private(set) var textModel: LlamaTextModel?
+    /// Set once the file is verified, for an embedding model spec.
+    private(set) var embeddingModel: LlamaEmbeddingModel?
 
     private var downloadTask: Task<Void, Never>?
 
@@ -75,12 +79,14 @@ final class ModelStore {
     /// Frees the model's memory, e.g. when the app goes to the background.
     func unloadFromMemory() async {
         await textModel?.runner.unload()
+        await embeddingModel?.runner.unload()
     }
 
     func deleteModel() async {
         cancelDownload()
         await unloadFromMemory()
         textModel = nil
+        embeddingModel = nil
         try? FileManager.default.removeItem(at: fileURL)
         try? FileManager.default.removeItem(at: markerURL)
         status = .notDownloaded
@@ -92,7 +98,12 @@ final class ModelStore {
 
     private func becomeReady() {
         status = .ready
-        if textModel == nil { textModel = LlamaTextModel(spec: spec, fileURL: fileURL) }
+        switch spec.kind {
+        case .text:
+            if textModel == nil { textModel = LlamaTextModel(spec: spec, fileURL: fileURL) }
+        case .embedding:
+            if embeddingModel == nil { embeddingModel = LlamaEmbeddingModel(spec: spec, fileURL: fileURL) }
+        }
     }
 
     private func performDownload() async {
@@ -188,4 +199,10 @@ private final class TaskCapture: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
         self.task.withLock { $0 = task }
     }
+}
+
+extension EnvironmentValues {
+    /// The search (embedding) model's store; `ModelStore` in the environment is the
+    /// text model's.
+    @Entry var embeddingStore: ModelStore? = nil
 }

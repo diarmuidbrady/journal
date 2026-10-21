@@ -79,7 +79,7 @@ Everything is processed inside the phone; the two optional (dashed) links carry 
 | Text model (alternative) | Apple Foundation Models framework, ~3B on-device model ([MacRumors](https://forums.macrumors.com/threads/apple-announced-foundation-models-framework-for-developers-to-leverage-ai.2458429/)) | — |
 | Database | SQLite via GRDB 7.11.1 + SQLCipher 4.19.0 (GRDB copied into `Packages/GRDB` with its documented SQLCipher setup; see `Packages/GRDB/VENDORED.md`) | Room + SQLCipher |
 | Key storage | Keychain, Secure Enclave-backed, biometric-gated | Android Keystore, biometric-gated |
-| Embeddings (for search) | Small on-device embedding model (e.g. a MiniLM/BGE-class model) via llama.cpp or Core ML | Same, via llama.cpp or ONNX Runtime |
+| Embeddings (for search) | Small on-device embedding model (e.g. a MiniLM/BGE-class model) via llama.cpp or Core ML. *Built: Qwen3-Embedding-0.6B via llama.cpp on the CPU (phase 5).* | Same, via llama.cpp or ONNX Runtime |
 
 **Model choice.** I prefer an open-weight model. Pick a current 3–4B instruct model from the Llama, Qwen, Gemma or Mistral families at build time, as a GGUF file downloaded once and bundled or stored in app storage. Expect roughly 2–3 GB on disk. Cleanup is an easy task for this size; cross-entry reflection is harder, so see the optional home server below. Apple's Foundation Models framework is acceptable on iPhone as a zero-download alternative: it is not open-weight, but it runs entirely on the device, and Day One already uses it for journaling features ([Pure AI](https://pureai.com/Articles/2025/06/09/Apple-WWDC.aspx)). Put the model behind a `TextModel` protocol so it can be swapped.
 
@@ -119,7 +119,7 @@ Everything is processed inside the phone; the two optional (dashed) links carry 
 1. **Encrypted file export** to iCloud Drive / Files. Simplest, no backend.
 2. **Supabase** as a blob store. Each entry is serialised to JSON, encrypted on the phone with XChaCha20-Poly1305 (libsodium), and uploaded as one row. The key comes from a passphrase via Argon2id and is stored in the Keychain/Keystore; a recovery phrase is shown once at setup. Enable Row Level Security and never ship the service-role key in the app. Note the free tier pauses projects after 7 days of inactivity ([Jet Admin](https://www.jetadmin.io/blog/supabase-review/)), so the app must tolerate a paused backend and retry later.
 
-**Security baseline.** App lock with biometrics and passcode fallback on every launch and after 1 minute in the background. The fallback is the device passcode (no separate app PIN). Blur the app in the task switcher. Audio files stored with iOS Data Protection "complete". No third-party SDKs, analytics or crash reporters. Network access only for the one-time AI model download from its pinned Hugging Face URL (Wi-Fi only, phase 3), Apple's one-time speech model download through iOS (phase 2), the optional backup and the home server.
+**Security baseline.** App lock with biometrics and passcode fallback on every launch and after 1 minute in the background. The fallback is the device passcode (no separate app PIN). Blur the app in the task switcher. Audio files stored with iOS Data Protection "complete". No third-party SDKs, analytics or crash reporters. Network access only for the one-time AI model downloads from their pinned Hugging Face URLs (text model, phase 3; search model, phase 5; Wi-Fi only), Apple's one-time speech model download through iOS (phase 2), the optional backup and the home server.
 
 **As built in phase 1:**
 - The database key is 256 random bits, stored in the Keychain as `WhenUnlockedThisDeviceOnly` with the `.userPresence` access control (Face ID or device passcode). The app never sees the key until you unlock.
@@ -209,6 +209,43 @@ Six features, built in the order listed; importing old journals has its own sect
 - Retrieval: on save, each entry gets a short summary, themes and an embedding (see Data model). For a date range, feed the summaries for that range to the model. For "all entries", retrieve the most relevant entries by embedding similarity, then answer. If the material exceeds the context window, summarise in batches, then answer from the batch summaries.
 - Every answer cites the entries it drew on, as tappable dates.
 - Answers can be saved as a "reflection" linked to those entries.
+
+**As built in phase 5 (2026-10-21):**
+
+*The screen*
+- An **Ask** tab with a scope menu (all entries, last 7 days, this month, custom range) and a category menu.
+- Tapping an example question fills it in, and picks "Last 7 days" or "This month" when the question says so.
+- Each question is answered on its own: earlier answers in the session aren't fed back in, so the small context goes to entries.
+- "Ask about this entry" is a button in the editor. It saves the entry first, then answers from that entry alone.
+
+*What the model reads*
+- A **range** is answered from summaries, each line showing the date and mood, e.g. `2026-10-14 (mood -0.3, worried): You…`. Entries not analysed yet use the first 300 characters of their text instead.
+- **All entries** uses the 12 most similar entries by embedding, with up to 700 characters of text each.
+- **One entry** uses its text.
+- Up to 9,000 characters go to the model at once. Beyond that, the material is cut into batches, each batch is reduced to dated notes (prompt `askBatch`, new), and the answer is written from the notes. A progress line shows "part N of M".
+
+*Changes to the Ask prompt (`ask-v1`)*
+- **The citation example is `[YYYY-MM-DD]`, not `[2026-10-14]`.** A real date could be copied by the model and falsely link to an entry written that day.
+- **It adds "Keep the whole answer under 200 words".** Without it, answers ran past the token limit and took over a minute on the phone.
+
+*Answers and reflections*
+- Answers render bold and italics. Every cited date that matches an entry in the material becomes a link to that day's entries; dates the model invents stay plain text.
+- "Save as reflection" stores the answer with its scope, category and cited entries. Saved reflections are under the bookmark button, and each shows the entries it drew on.
+- The background pass is paused while an answer is being written, so the model is free.
+
+*Search model (embeddings)*
+- **Qwen3-Embedding-0.6B, Q8_0** (639 MB, Apache 2.0), Qwen's official GGUF pinned to commit `370f27d7…` with SHA-256 `06507c7b…` (full values in `ModelSpec.swift`).
+  - **Why not the spec's MiniLM or BGE-small:** both are older and only read 512 tokens.
+  - **Why not EmbeddingGemma 2:** it's half the size but was released the same day as the pinned llama.cpp build, so support is uncertain. Worth revisiting.
+  - Queries get Qwen's instruction prefix; entries are embedded as they are.
+- **The search model runs on the CPU, not the GPU.** With the text model already on the GPU, a second GPU model got the app killed for memory on the iPhone 15.
+  - Its context is 1,024 tokens, so search reads roughly the first 3,500 characters of an entry. At 2,048 tokens, embedding briefly used about 700 MB.
+  - Measured on the phone: loads in about 1 s, embeds an entry in about 3 s. A full answer takes about 36 s.
+- Entries are embedded by the background pass after their analysis.
+  - A text change clears the embedding.
+  - The search model's id is kept in `settings` (`embedding_model`). If it changes, every entry is embedded again, because vectors from different models can't be compared.
+  - Vectors are stored L2-normalised as little-endian Float32 in `entries.embedding`, and search is a dot product in Swift.
+- `Tools/ask-check.sh` runs retrieval and one answer with both real models on a Mac. Retrieval found the expected entry first for 4 of 5 test questions; the fifth was a tie for second.
 
 ### 5. Mood calendar
 
@@ -391,7 +428,7 @@ One encrypted SQLite database on the phone. Six tables; derived AI fields live o
 | embedding | blob, nullable | Vector of the cleaned (or original) text |
 | ai_version | text | Model + prompt version that produced the AI fields, so they can be regenerated |
 
-**reflections:** id, created_at, question, answer, scope (`entry` / `range` / `all`), range_start, range_end, cited_entry_ids (JSON array).
+**reflections:** id, created_at, question, answer, scope (`entry` / `range` / `all`), range_start, range_end, cited_entry_ids (JSON array). *As built (migration v3):* also `category` (the filter used, if any) and `ai_version`.
 
 **attachments:** id, entry_id, kind (`page_photo` / `image`), file_path (encrypted file), page_order, ocr_text.
 
@@ -405,7 +442,7 @@ One encrypted SQLite database on the phone. Six tables; derived AI fields live o
 
 **Cloud backup row (only if Supabase is used):** id (UUID, same as entry id), updated_at, nonce, ciphertext (bytea), schema_version. No plaintext columns, not even the date, since dates alone reveal patterns.
 
-**Export:** one tap exports a zip through the share sheet, containing `journal.json` (every entry and category) and an `Audio/` folder. Each entry's `audio_path` points at its file inside the zip. The zip is made with the system's own zipping (`NSFileCoordinator` with `.forUploading`), so no library is needed. It is written to the vault's `Export/` folder, which is emptied on every unlock so plaintext copies don't linger. The passphrase-encrypted version is added in phase 7 and reuses the backup encryption.
+**Export:** (schema 2 adds saved reflections) one tap exports a zip through the share sheet, containing `journal.json` (every entry and category) and an `Audio/` folder. Each entry's `audio_path` points at its file inside the zip. The zip is made with the system's own zipping (`NSFileCoordinator` with `.forUploading`), so no library is needed. It is written to the vault's `Export/` folder, which is emptied on every unlock so plaintext copies don't linger. The passphrase-encrypted version is added in phase 7 and reuses the backup encryption.
 
 ## Prompts
 
@@ -453,7 +490,8 @@ Entry:
 You help me reflect on my own journal. Answer my question using only the entries below.
 Be direct and specific. Point out patterns, contradictions and things I may be avoiding when the entries support it.
 If the entries do not contain enough to answer, say so.
-After each point, cite the entry date in brackets, e.g. [2026-10-14].
+After each point, cite the entry date in brackets, e.g. [YYYY-MM-DD].
+Keep the whole answer under 200 words.
 
 Entries (date: text or summary):
 {context}
@@ -495,7 +533,7 @@ Build in seven phases; each ends with something usable on the phone.
 2. **Voice:** recording and on-device transcription. *(Built 2026-10-21.)*
 3. **Cleanup:** model runtime behind `TextModel`, cleanup prompt, diff view. *(Built 2026-10-21.)*
 4. **Mood and categories:** mood, summary, themes and categories on save; month calendar; category filter. *(Built 2026-10-21.)*
-5. **Ask:** embeddings, retrieval, Q&A screen, saved reflections.
+5. **Ask:** embeddings, retrieval, Q&A screen, saved reflections. *(Built 2026-10-21.)*
 6. **Import:** text/Markdown files first, then Notion, then Apple Notes, then photos with text recognition.
 7. **Backup (optional):** encrypted export to a cloud drive, or Supabase blob sync.
 

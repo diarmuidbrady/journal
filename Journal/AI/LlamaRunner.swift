@@ -188,6 +188,91 @@ actor LlamaRunner {
         return buffer.prefix(Int(max(length, 0))).map { UInt8(bitPattern: $0) }
     }
 }
+
+/// Owns a llama.cpp embedding model. One pooled, normalised vector per text.
+actor EmbeddingRunner {
+    let modelURL: URL
+    /// Texts longer than this many tokens (about 3,500 characters) are cut to their
+    /// start. Attention memory grows with its square: 2,048 peaked at ~700 MB on the
+    /// iPhone 15, so the search sees roughly the first page of a long entry.
+    let contextLength: Int
+
+    private var model: OpaquePointer?
+    private var context: OpaquePointer?
+    private var vocab: OpaquePointer?
+
+    init(modelURL: URL, contextLength: Int = 1024) {
+        self.modelURL = modelURL
+        self.contextLength = contextLength
+    }
+
+    func load() throws {
+        guard context == nil else { return }
+        llama_backend_init()
+        llama_log_set({ _, _, _ in }, nil)
+
+        var modelParams = llama_model_default_params()
+        // CPU only: with the text model already resident on the GPU, putting a second
+        // model there got the app killed for memory on the iPhone 15. A 0.6B model is
+        // quick enough on the CPU, and its weights stay as reclaimable file pages.
+        modelParams.n_gpu_layers = 0
+        guard let model = llama_model_load_from_file(modelURL.path(percentEncoded: false), modelParams) else {
+            throw LlamaError.loadFailed
+        }
+        var contextParams = llama_context_default_params()
+        contextParams.n_ctx = UInt32(contextLength)
+        contextParams.offload_kqv = false
+        contextParams.op_offload = false
+        // The whole text must fit in one batch to be pooled into a single vector.
+        contextParams.n_batch = UInt32(contextLength)
+        contextParams.n_ubatch = UInt32(contextLength)
+        contextParams.n_threads = 4
+        contextParams.n_threads_batch = 4
+        contextParams.embeddings = true
+        guard let context = llama_init_from_model(model, contextParams) else {
+            llama_model_free(model)
+            throw LlamaError.contextFailed
+        }
+        self.model = model
+        self.context = context
+        self.vocab = llama_model_get_vocab(model)
+    }
+
+    func unload() {
+        if let context { llama_free(context) }
+        if let model { llama_model_free(model) }
+        context = nil
+        model = nil
+        vocab = nil
+    }
+
+    func embed(_ text: String) throws -> [Float] {
+        try load()
+        guard let context, let vocab, let model else { throw LlamaError.contextFailed }
+        llama_memory_clear(llama_get_memory(context), true)
+
+        let length = Int32(text.utf8.count)
+        var tokens = [llama_token](repeating: 0, count: Int(length) + 16)
+        let count = llama_tokenize(vocab, text, length, &tokens, Int32(tokens.count), true, false)
+        tokens = Array(tokens.prefix(Int(max(count, 0))))
+        // Last-token pooling models (Qwen3-Embedding) expect the text to end with EOS.
+        let eos = llama_vocab_eos(vocab)
+        if tokens.count >= contextLength { tokens = Array(tokens.prefix(contextLength - 1)) }
+        if tokens.last != eos { tokens.append(eos) }
+
+        let result = tokens.withUnsafeMutableBufferPointer { buffer in
+            llama_decode(context, llama_batch_get_one(buffer.baseAddress!, Int32(buffer.count)))
+        }
+        guard result == 0 else { throw LlamaError.decodeFailed(result) }
+
+        let dimensions = Int(llama_model_n_embd(model))
+        guard let pointer = llama_get_embeddings_seq(context, 0) ?? llama_get_embeddings_ith(context, -1) else {
+            throw LlamaError.decodeFailed(-1)
+        }
+        let vector = Array(UnsafeBufferPointer(start: pointer, count: dimensions))
+        return Vectors.normalised(vector)
+    }
+}
 #else
 /// llama.cpp publishes no iOS Simulator build, so the app links it on devices only
 /// and the Simulator gets this stand-in.
@@ -215,7 +300,68 @@ actor LlamaRunner {
         throw LlamaError.unavailable
     }
 }
+
+actor EmbeddingRunner {
+    let modelURL: URL
+    let contextLength: Int
+
+    init(modelURL: URL, contextLength: Int = 1024) {
+        self.modelURL = modelURL
+        self.contextLength = contextLength
+    }
+
+    func load() throws { throw LlamaError.unavailable }
+
+    func unload() {}
+
+    func embed(_ text: String) throws -> [Float] { throw LlamaError.unavailable }
+}
 #endif
+
+/// Qwen3-Embedding run with llama.cpp. Queries get the model's instruction prefix;
+/// documents (entries) are embedded as they are.
+struct LlamaEmbeddingModel: EmbeddingModel {
+    let spec: ModelSpec
+    let runner: EmbeddingRunner
+
+    init(spec: ModelSpec, fileURL: URL) {
+        self.spec = spec
+        self.runner = EmbeddingRunner(modelURL: fileURL)
+    }
+
+    var identifier: String { spec.id }
+
+    func embed(document: String) async throws -> [Float] {
+        try await runner.embed(document)
+    }
+
+    func embed(query: String) async throws -> [Float] {
+        try await runner.embed("Instruct: Given a question about a personal journal, retrieve journal entries that help answer it\nQuery: \(query)")
+    }
+}
+
+/// Vector helpers for embeddings stored as little-endian Float32 blobs.
+enum Vectors {
+    static func normalised(_ vector: [Float]) -> [Float] {
+        let length = vector.reduce(0) { $0 + $1 * $1 }.squareRoot()
+        return length > 0 ? vector.map { $0 / length } : vector
+    }
+
+    static func dot(_ a: [Float], _ b: [Float]) -> Float {
+        guard a.count == b.count else { return -1 }
+        var sum: Float = 0
+        for index in a.indices { sum += a[index] * b[index] }
+        return sum
+    }
+
+    static func data(_ vector: [Float]) -> Data {
+        vector.withUnsafeBufferPointer { Data(buffer: $0) }
+    }
+
+    static func vector(_ data: Data) -> [Float] {
+        data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+    }
+}
 
 /// A GGUF model run on the phone with llama.cpp (Metal on device).
 struct LlamaTextModel: TextModel {

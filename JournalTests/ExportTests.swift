@@ -12,7 +12,7 @@ struct ExportTests {
         let decoded = try JournalExport.decode(data)
 
         #expect(decoded.format == "journal-export")
-        #expect(decoded.schemaVersion == 1)
+        #expect(decoded.schemaVersion == 2)
         #expect(decoded.categories.count == Category.defaultNames.count)
 
         let stored = try await test.store.fetchAll()

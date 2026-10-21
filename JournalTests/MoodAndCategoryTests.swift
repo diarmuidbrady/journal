@@ -219,7 +219,7 @@ struct AnalysisQueueTests {
         try await test.store.save(entry)
         let model = FakeAnalysisModel(reply: FakeAnalysisModel.json())
         let queue = AnalysisQueue()
-        queue.editorOpened()
+        queue.pause()
 
         let task = Task { await queue.run(store: test.store, model: model) }
         try await Task.sleep(for: .milliseconds(200))

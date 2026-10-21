@@ -13,6 +13,14 @@ struct ModelSpec: Sendable, Equatable {
     /// Appended after the chat template's assistant header. For Qwen, an empty
     /// think block turns off "thinking" so it answers directly.
     let assistantPrefix: String
+    var kind: Kind = .text
+
+    enum Kind: Sendable {
+        /// Writes: cleanup, analysis, answers.
+        case text
+        /// Turns text into vectors for "all entries" search.
+        case embedding
+    }
 }
 
 extension ModelSpec {
@@ -38,6 +46,21 @@ extension ModelSpec {
         assistantPrefix: ""
     )
 
-    /// The model the app downloads and uses.
+    static let qwen3Embedding06B = ModelSpec(
+        id: "qwen3-embedding-0.6b-q8_0",
+        displayName: "Qwen3-Embedding 0.6B (Q8_0)",
+        fileName: "Qwen3-Embedding-0.6B-Q8_0.gguf",
+        url: URL(string: "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/370f27d7550e0def9b39c1f16d3fbaa13aa67728/Qwen3-Embedding-0.6B-Q8_0.gguf")!,
+        sha256: "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
+        sizeBytes: 639_150_592,
+        licence: "Apache 2.0",
+        assistantPrefix: "",
+        kind: .embedding
+    )
+
+    /// The model the app downloads and uses for writing.
     static let current = qwen35_4B
+
+    /// The model the app downloads and uses for search.
+    static let currentEmbedding = qwen3Embedding06B
 }

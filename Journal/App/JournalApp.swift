@@ -6,6 +6,7 @@ struct JournalApp: App {
     @State private var speechModel = SpeechModel()
     @State private var modelStore = ModelStore()
     @State private var analysisQueue = AnalysisQueue()
+    @State private var embeddingStore = ModelStore(spec: .currentEmbedding)
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -21,12 +22,21 @@ struct JournalApp: App {
                 .environment(speechModel)
                 .environment(modelStore)
                 .environment(analysisQueue)
-                .task { await modelStore.refresh() }
+                .environment(\.embeddingStore, embeddingStore)
+                .task {
+                    await modelStore.refresh()
+                    await embeddingStore.refresh()
+                }
         }
         .onChange(of: scenePhase) { _, phase in
             vault.scenePhaseChanged(phase)
             // A loaded model holds gigabytes; free it so iOS doesn't end the app in the background.
-            if phase == .background { Task { await modelStore.unloadFromMemory() } }
+            if phase == .background {
+                Task {
+                    await modelStore.unloadFromMemory()
+                    await embeddingStore.unloadFromMemory()
+                }
+            }
         }
     }
 }
@@ -62,12 +72,13 @@ struct RootView: View {
     }
 }
 
-/// Journal and Mood tabs, plus the background analysis pass while unlocked.
+/// Journal, Mood and Ask tabs, plus the background analysis pass while unlocked.
 struct MainTabs: View {
     let store: EntryStore
 
     @Environment(ModelStore.self) private var modelStore
     @Environment(AnalysisQueue.self) private var analysisQueue
+    @Environment(\.embeddingStore) private var embeddingStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var tab = MainTabs.initialTab
 
@@ -75,7 +86,8 @@ struct MainTabs: View {
     private struct AnalysisConditions: Hashable {
         var active: Bool
         var modelReady: Bool
-        var editorClosed: Bool
+        var searchModelReady: Bool
+        var unpaused: Bool
     }
 
     var body: some View {
@@ -86,14 +98,18 @@ struct MainTabs: View {
             Tab("Mood", systemImage: "calendar", value: "mood") {
                 MoodCalendarView(store: store)
             }
+            Tab("Ask", systemImage: "sparkles", value: "ask") {
+                AskView(store: store)
+            }
         }
         .task(id: AnalysisConditions(
             active: scenePhase == .active,
             modelReady: modelStore.status == .ready,
-            editorClosed: analysisQueue.openEditors == 0
+            searchModelReady: embeddingStore?.status == .ready,
+            unpaused: !analysisQueue.isPaused
         )) {
-            guard scenePhase == .active, analysisQueue.openEditors == 0, let model = modelStore.textModel else { return }
-            await analysisQueue.run(store: store, model: model)
+            guard scenePhase == .active, !analysisQueue.isPaused, let model = modelStore.textModel else { return }
+            await analysisQueue.run(store: store, model: model, embedder: embeddingStore?.embeddingModel)
         }
     }
 

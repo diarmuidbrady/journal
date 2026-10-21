@@ -184,7 +184,7 @@ private struct DayCell: View {
 }
 
 /// The entries written on one day, from tapping it in the calendar.
-private struct DayEntriesView: View {
+struct DayEntriesView: View {
     let store: EntryStore
     let day: DayDate
 

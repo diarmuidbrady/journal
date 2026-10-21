@@ -38,6 +38,30 @@ enum DebugBenchmark {
                 start = .now
                 let analysis = try await Analyzer(model: model).analyze(sample, categories: Category.defaultNames)
                 log("analysed in \(Date.now.timeIntervalSince(start).formatted(.number.precision(.fractionLength(1))))s: \(analysis.moodScore) \(analysis.moodLabel) \(analysis.emotions) \(analysis.primaryCategory) \(analysis.secondaryCategories)")
+
+                let search = ModelStore(spec: .currentEmbedding)
+                start = .now
+                await search.refresh()
+                log("search model status \(search.status) after \(Date.now.timeIntervalSince(start).formatted(.number.precision(.fractionLength(1))))s")
+                if let embedder = search.embeddingModel {
+                    start = .now
+                    try await embedder.runner.load()
+                    log("search model loaded in \(Date.now.timeIntervalSince(start).formatted(.number.precision(.fractionLength(1))))s")
+                    start = .now
+                    let vector = try await embedder.embed(document: sample)
+                    log("embedded in \(Date.now.timeIntervalSince(start).formatted(.number.precision(.fractionLength(2))))s (\(vector.count) dimensions)")
+                    await embedder.runner.unload()
+                } else {
+                    log("search model not ready: \(search.status)")
+                }
+
+                start = .now
+                let answer = try await model.generate(
+                    [ChatMessage(role: .user, content: Prompts.ask("What should I do differently next time?", context: "2026-10-01: \(sample)"))],
+                    options: GenerationOptions(maxTokens: 500, temperature: 0.4),
+                    onText: { _ in }
+                )
+                log("answered in \(Date.now.timeIntervalSince(start).formatted(.number.precision(.fractionLength(1))))s, \(answer.count) chars, cites \(Citations.dates(in: answer).map(\.string))")
                 await model.runner.unload()
                 log("unloaded")
                 exit(0)

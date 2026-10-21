@@ -1,5 +1,4 @@
 import Foundation
-import GRDB
 
 /// A calendar day with no time or time zone, stored as `yyyy-MM-dd`.
 /// An entry belongs to the day it was dated, whatever time zone it is read in.
@@ -52,13 +51,5 @@ extension DayDate: Codable {
     func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(string)
-    }
-}
-
-extension DayDate: DatabaseValueConvertible {
-    var databaseValue: DatabaseValue { string.databaseValue }
-
-    static func fromDatabaseValue(_ dbValue: DatabaseValue) -> DayDate? {
-        String.fromDatabaseValue(dbValue).flatMap(DayDate.init(string:))
     }
 }

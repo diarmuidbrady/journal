@@ -54,7 +54,11 @@ final class EntryStore: Sendable {
             } else {
                 try entry.update(db, columns: Entry.editorColumns)
                 if textChanged {
-                    try Entry.filter(key: entry.id).updateAll(db, Entry.Columns.needsAnalysis.set(to: true))
+                    try Entry.filter(key: entry.id).updateAll(
+                        db,
+                        Entry.Columns.needsAnalysis.set(to: true),
+                        Entry.Columns.embedding.set(to: nil)
+                    )
                 }
             }
         }
@@ -168,6 +172,94 @@ final class EntryStore: Sendable {
             _ = try Entry.filter(Column("categories_manual") == false)
                 .updateAll(db, Entry.Columns.needsAnalysis.set(to: true))
         }
+    }
+
+    // MARK: Embeddings and asking
+
+    /// Clears every embedding if the search model changed, so all entries are embedded
+    /// again with the same model (vectors from different models can't be compared).
+    func ensureEmbeddingModel(_ identifier: String) async throws {
+        try await database.writer.write { db in
+            let current = try String.fetchOne(db, sql: "SELECT value FROM settings WHERE key = 'embedding_model'")
+            guard current != identifier else { return }
+            _ = try Entry.updateAll(db, Entry.Columns.embedding.set(to: nil))
+            try db.execute(sql: "INSERT OR REPLACE INTO settings (key, value) VALUES ('embedding_model', ?)", arguments: [identifier])
+        }
+    }
+
+    /// The newest analysed entry that has no embedding yet.
+    func nextEntryNeedingEmbedding(excluding: Set<UUID>) async throws -> Entry? {
+        try await database.writer.read { db in
+            try Entry
+                .filter(Entry.Columns.needsAnalysis == false && Entry.Columns.embedding == nil)
+                .filter(!excluding.map { $0.uuidString.lowercased() }.contains(Entry.Columns.id))
+                .order(Self.newestFirst)
+                .fetchOne(db)
+        }
+    }
+
+    /// Stores an embedding unless the text changed meanwhile. Entries with no text get
+    /// an empty one so they aren't picked up again.
+    @discardableResult
+    func applyEmbedding(_ vector: [Float], to id: UUID, embeddedText: String, aiVersion: String) async throws -> Bool {
+        try await database.writer.write { db in
+            guard var entry = try Entry.fetchOne(db, key: id), entry.analysisText == embeddedText else { return false }
+            entry.embedding = Vectors.data(vector)
+            entry.aiVersion = AIVersion.merging(entry.aiVersion, aiVersion)
+            try entry.update(db, columns: ["embedding", "ai_version"])
+            return true
+        }
+    }
+
+    /// Every stored embedding, optionally only for entries in a category.
+    func embeddings(category: String?) async throws -> [(id: UUID, vector: [Float])] {
+        try await database.writer.read { db in
+            try Entry.filter(Entry.Columns.embedding != nil).fetchAll(db)
+                .filter { category == nil || $0.categories.contains(category!) }
+                .compactMap { entry in
+                    guard let data = entry.embedding, !data.isEmpty else { return nil }
+                    return (entry.id, Vectors.vector(data))
+                }
+        }
+    }
+
+    /// Entries dated within the range (inclusive), oldest first.
+    func entries(from start: DayDate, through end: DayDate, category: String?) async throws -> [Entry] {
+        try await database.writer.read { db in
+            try Entry
+                .filter(Entry.Columns.entryDate >= start.string && Entry.Columns.entryDate <= end.string)
+                .order(Entry.Columns.entryDate, Entry.Columns.createdAt)
+                .fetchAll(db)
+                .filter { category == nil || $0.categories.contains(category!) }
+        }
+    }
+
+    /// The given entries, oldest first.
+    func entries(ids: [UUID]) async throws -> [Entry] {
+        try await database.writer.read { db in
+            try Entry.fetchAll(db, keys: ids)
+                .sorted { ($0.entryDate, $0.createdAt) < ($1.entryDate, $1.createdAt) }
+        }
+    }
+
+    // MARK: Reflections
+
+    func observeReflections() -> AsyncValueObservation<[Reflection]> {
+        ValueObservation
+            .tracking { db in try Reflection.order(Column("created_at").desc).fetchAll(db) }
+            .values(in: database.writer)
+    }
+
+    func saveReflection(_ reflection: Reflection) async throws {
+        try await database.writer.write { db in try reflection.save(db) }
+    }
+
+    func deleteReflection(id: UUID) async throws {
+        _ = try await database.writer.write { db in try Reflection.deleteOne(db, key: id) }
+    }
+
+    func reflections() async throws -> [Reflection] {
+        try await database.writer.read { db in try Reflection.order(Column("created_at").desc).fetchAll(db) }
     }
 
     // MARK: Categories

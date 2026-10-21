@@ -16,6 +16,15 @@ struct GenerationOptions: Sendable {
     var grammar: String? = nil
 }
 
+/// Turns text into a vector for similarity search. Vectors are L2-normalised, so a dot
+/// product is the cosine similarity.
+protocol EmbeddingModel: Sendable {
+    /// Recorded in `ai_version`; a change means every entry is embedded again.
+    var identifier: String { get }
+    func embed(document: String) async throws -> [Float]
+    func embed(query: String) async throws -> [Float]
+}
+
 /// An on-device text model. Implementations can be swapped (SPEC.md, Model choice):
 /// llama.cpp today; Apple Foundation Models or a home server later.
 protocol TextModel: Sendable {
