@@ -116,7 +116,7 @@ private struct EntryRow: View {
             .split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        let heading = entry.trimmedTitle ?? lines.first ?? "Untitled"
+        let heading = entry.trimmedTitle ?? lines.first ?? (entry.audioPath == nil ? "Untitled" : "Voice entry")
         let preview = (entry.trimmedTitle == nil ? lines.dropFirst() : lines[...]).joined(separator: " ")
 
         VStack(alignment: .leading, spacing: 4) {
@@ -129,9 +129,15 @@ private struct EntryRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            Text(entry.createdAt.formatted(date: .omitted, time: .shortened))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            HStack(spacing: 8) {
+                Text(entry.createdAt.formatted(date: .omitted, time: .shortened))
+                if let seconds = entry.audioDurationS {
+                    Label(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)), systemImage: "mic.fill")
+                        .accessibilityLabel("Recording")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 2)
     }

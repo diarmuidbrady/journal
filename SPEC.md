@@ -94,7 +94,7 @@ Everything is processed inside the phone; the two optional (dashed) links carry 
 1. **Encrypted file export** to iCloud Drive / Files. Simplest, no backend.
 2. **Supabase** as a blob store. Each entry is serialised to JSON, encrypted on the phone with XChaCha20-Poly1305 (libsodium), and uploaded as one row. The key comes from a passphrase via Argon2id and is stored in the Keychain/Keystore; a recovery phrase is shown once at setup. Enable Row Level Security and never ship the service-role key in the app. Note the free tier pauses projects after 7 days of inactivity ([Jet Admin](https://www.jetadmin.io/blog/supabase-review/)), so the app must tolerate a paused backend and retry later.
 
-**Security baseline.** App lock with biometrics and passcode fallback on every launch and after 1 minute in the background. The fallback is the device passcode (no separate app PIN). Blur the app in the task switcher. Audio files stored with iOS Data Protection "complete". No third-party SDKs, analytics or crash reporters. Network access only for the one-time model download, the optional backup and the home server.
+**Security baseline.** App lock with biometrics and passcode fallback on every launch and after 1 minute in the background. The fallback is the device passcode (no separate app PIN). Blur the app in the task switcher. Audio files stored with iOS Data Protection "complete". No third-party SDKs, analytics or crash reporters. Network access only for the one-time model download, Apple's one-time speech model download through iOS (phase 2), the optional backup and the home server.
 
 **As built in phase 1:**
 - The database key is 256 random bits, stored in the Keychain as `WhenUnlockedThisDeviceOnly` with the `.userPresence` access control (Face ID or device passcode). The app never sees the key until you unlock.
@@ -124,6 +124,25 @@ Six features, built in the order listed; importing old journals has its own sect
 - The transcript is appended to the entry text and stays editable.
 - Long recordings (30+ minutes) are processed in chunks with a progress indicator.
 - Keep the audio file until I delete it, so I can replay or re-transcribe.
+
+**As built in phase 2 (2026-10-21):**
+
+*Engine and model*
+- Transcription uses Apple's SpeechAnalyzer. SpeechTranscriber is used where the device supports it, with DictationTranscriber as the fallback. The locale is the phone's own (en_IE was picked in testing), falling back to en_GB, then en_US. Audio never leaves the phone.
+- **Network:** the on-device speech model may need a one-time download through iOS's own asset service (`AssetInventory`). It only starts when I tap Download, either in Settings → Voice or in the prompt shown when I first record. No audio or text is sent. iOS tracks the download per app.
+- Apple's engine already drops some fillers ("um") and adds punctuation, so `original_text` is close to verbatim but not exact.
+
+*Recording and storage*
+- Transcription runs after recording stops, not live. The recording is saved into the entry first, then transcribed, so a long or interrupted transcription never loses audio.
+- A pause of 2.5 seconds or more in speech starts a new paragraph. The transcript is appended after a blank line.
+- Each entry has one audio file (`Audio/<entry id>.m4a`). A second recording is added to the end of that file, and only the new part is transcribed.
+- "Transcribe recording" in the recording's menu re-runs the whole file and appends the result. "Delete recording" removes the audio and keeps the text.
+- Recordings in progress use the protection class "complete unless open", so a recording isn't cut off if the phone locks. Finished audio is switched to "complete".
+- The screen stays awake while recording. If the app goes to the background, recording stops and what was recorded is kept. There is no background recording, because the app locks after 1 minute away.
+
+*Interface*
+- Long recordings are processed as a stream by SpeechAnalyzer, which reports progress as it goes. No manual chunking is needed. A progress bar shows while it runs.
+- An entry that starts as a recording, with no typed text, has `source = audio`. Deleting an entry deletes its audio.
 
 ### 3. AI cleanup
 
@@ -283,7 +302,7 @@ One encrypted SQLite database on the phone. Six tables; derived AI fields live o
 
 **Cloud backup row (only if Supabase is used):** id (UUID, same as entry id), updated_at, nonce, ciphertext (bytea), schema_version. No plaintext columns, not even the date, since dates alone reveal patterns.
 
-**Export:** one-tap export of everything to a JSON file (plus audio in a zip once phase 2 adds audio). Phase 1 exports plain JSON through the share sheet; the passphrase-encrypted version is added in phase 7 and reuses the backup encryption.
+**Export:** one tap exports a zip through the share sheet, containing `journal.json` (every entry and category) and an `Audio/` folder. Each entry's `audio_path` points at its file inside the zip. The zip is made with the system's own zipping (`NSFileCoordinator` with `.forUploading`), so no library is needed. It is written to the vault's `Export/` folder, which is emptied on every unlock so plaintext copies don't linger. The passphrase-encrypted version is added in phase 7 and reuses the backup encryption.
 
 ## Prompts
 
@@ -368,7 +387,7 @@ The app is never published to a store; it is installed directly from my computer
 Build in seven phases; each ends with something usable on the phone.
 
 1. **Vault:** app lock, encrypted database, typed entries, entry list, export. *(Built 2026-10-21.)*
-2. **Voice:** recording and on-device transcription.
+2. **Voice:** recording and on-device transcription. *(Built 2026-10-21.)*
 3. **Cleanup:** model runtime behind `TextModel`, cleanup prompt, diff view.
 4. **Mood and categories:** mood, summary, themes and categories on save; month calendar; category filter.
 5. **Ask:** embeddings, retrieval, Q&A screen, saved reflections.

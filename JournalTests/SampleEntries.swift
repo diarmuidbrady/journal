@@ -25,20 +25,20 @@ enum SampleEntries {
     }
 }
 
-/// An encrypted database in a fresh temporary directory.
+/// An encrypted database and vault folders in a fresh temporary directory.
 struct TestDatabase {
-    let directory: URL
-    let url: URL
+    let paths: VaultPaths
     let key: Data
     let database: AppDatabase
 
     init() throws {
-        directory = FileManager.default.temporaryDirectory.appending(path: "JournalTests-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        url = directory.appending(path: "journal.sqlite")
+        paths = VaultPaths(directory: FileManager.default.temporaryDirectory.appending(path: "JournalTests-\(UUID().uuidString)"))
+        try paths.prepare()
         key = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
-        database = try AppDatabase.open(at: url, key: key)
+        database = try AppDatabase.open(at: paths.databaseURL, key: key)
     }
 
-    var store: EntryStore { EntryStore(database: database) }
+    var directory: URL { paths.directory }
+    var url: URL { paths.databaseURL }
+    var store: EntryStore { EntryStore(database: database, paths: paths) }
 }

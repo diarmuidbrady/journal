@@ -9,7 +9,8 @@ struct DatabaseTests {
 
         #expect(!(try Data(contentsOf: test.url)).starts(with: Data("SQLite format 3".utf8)))
         // Check the main file and the write-ahead log, where recent writes live.
-        let files = try FileManager.default.contentsOfDirectory(at: test.directory, includingPropertiesForKeys: nil)
+        let files = try FileManager.default.contentsOfDirectory(at: test.directory, includingPropertiesForKeys: [.isRegularFileKey])
+            .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }
         #expect(files.contains { $0.lastPathComponent == "journal.sqlite-wal" })
         for file in files {
             let bytes = try Data(contentsOf: file)
@@ -33,7 +34,7 @@ struct DatabaseTests {
         let sample = SampleEntries.all()[0]
         try await test.store.save(sample)
 
-        let reopened = EntryStore(database: try AppDatabase.open(at: test.url, key: test.key))
+        let reopened = EntryStore(database: try AppDatabase.open(at: test.url, key: test.key), paths: test.paths)
         let fetched = try await reopened.fetch(id: sample.id)
         #expect(fetched?.originalText == sample.originalText)
     }

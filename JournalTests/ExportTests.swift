@@ -39,7 +39,24 @@ struct ExportTests {
         #expect(json.contains("\"date_source\" : \"typed\""))
     }
 
-    @Test func fileNameHasDate() {
-        #expect(JournalExport.fileName(on: DayDate(year: 2026, month: 10, day: 21)) == "journal-export-2026-10-21.json")
+    @Test @MainActor func archiveIsAZipAndLeavesNoLooseFiles() async throws {
+        let test = try TestDatabase()
+        let entry = Entry.newTyped()
+        let model = EntryEditorModel(store: test.store, entry: entry, isPersisted: false, transcriber: FakeTranscriber(text: "Hello."))
+        await model.addRecording(segmentAt: try ToneFile.make(seconds: 1, in: test.paths.recordingsDirectory))
+
+        let archive = try await JournalExport.makeArchive(from: test.store, on: DayDate(year: 2026, month: 10, day: 21))
+
+        #expect(archive.lastPathComponent == "journal-export-2026-10-21.zip")
+        #expect(try Data(contentsOf: archive).starts(with: Data("PK".utf8)))
+        let names = try String(decoding: Data(contentsOf: archive), as: UTF8.self)
+        #expect(names.contains("journal.json"))
+        #expect(names.contains(test.paths.audioRelativePath(for: entry.id)))
+        // Only the zip remains; the unzipped copy is removed.
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: test.paths.exportDirectory.path)
+        #expect(leftovers == [archive.lastPathComponent])
+
+        test.paths.clearExports()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: test.paths.exportDirectory.path).isEmpty)
     }
 }

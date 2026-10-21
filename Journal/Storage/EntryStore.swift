@@ -1,12 +1,14 @@
 import Foundation
 import GRDB
 
-/// Reads and writes entries. Exists only while the vault is unlocked.
+/// Reads and writes entries and their recordings. Exists only while the vault is unlocked.
 final class EntryStore: Sendable {
     let database: AppDatabase
+    let paths: VaultPaths
 
-    init(database: AppDatabase) {
+    init(database: AppDatabase, paths: VaultPaths) {
         self.database = database
+        self.paths = paths
     }
 
     /// All entries, newest day first, newest created first within a day.
@@ -36,8 +38,18 @@ final class EntryStore: Sendable {
         try await database.writer.write { db in try entry.save(db) }
     }
 
+    /// Deletes the entry and its recording.
     func delete(id: UUID) async throws {
-        _ = try await database.writer.write { db in try Entry.deleteOne(db, key: id) }
+        let audioPath = try await database.writer.write { db -> String? in
+            let audioPath = try Entry.fetchOne(db, key: id)?.audioPath
+            try Entry.deleteOne(db, key: id)
+            return audioPath
+        }
+        if let audioPath { try? FileManager.default.removeItem(at: paths.url(forRelativePath: audioPath)) }
+    }
+
+    func audioURL(for entry: Entry) -> URL? {
+        entry.audioPath.map(paths.url(forRelativePath:))
     }
 
     func categories() async throws -> [Category] {

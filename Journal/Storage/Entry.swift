@@ -75,7 +75,7 @@ struct Entry: Identifiable, Hashable, Codable, Sendable {
     }
 
     var isEmpty: Bool {
-        trimmedTitle == nil && originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        trimmedTitle == nil && originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && audioPath == nil
     }
 
     /// SHA-256 of the normalised text (lowercased, whitespace collapsed) plus the date,

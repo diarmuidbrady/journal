@@ -47,7 +47,8 @@ final class Vault {
                 createIfMissing: !paths.databaseExists
             )
             defer { key.resetBytes(in: 0..<key.count) }
-            let store = EntryStore(database: try AppDatabase.open(at: paths.databaseURL, key: key))
+            paths.clearExports()
+            let store = EntryStore(database: try AppDatabase.open(at: paths.databaseURL, key: key), paths: paths)
             #if DEBUG
             try await DebugSampleData.seedIfRequested(into: store)
             #endif

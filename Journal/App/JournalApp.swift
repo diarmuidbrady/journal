@@ -3,12 +3,14 @@ import SwiftUI
 @main
 struct JournalApp: App {
     @State private var vault = Vault()
+    @State private var speechModel = SpeechModel()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(vault)
+                .environment(speechModel)
         }
         .onChange(of: scenePhase) { _, phase in
             vault.scenePhaseChanged(phase)

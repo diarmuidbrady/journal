@@ -2,7 +2,9 @@
 
 A private, single-user journal for iPhone. Everything is processed and stored on the phone, in an encrypted database unlocked with Face ID. The build brief is [SPEC.md](SPEC.md).
 
-**Status:** phase 1 (Vault) is built: app lock, encrypted database, typed entries, entry list and JSON export.
+**Status:** phases 1–2 are built:
+- **Vault:** app lock, encrypted database, typed entries, entry list, export.
+- **Voice:** recording with pause/resume and a waveform, and on-device transcription.
 
 ## Install on the iPhone
 
@@ -43,7 +45,8 @@ Journal/
   App/        App entry point, Vault (lock state)
   Security/   Keychain key store, privacy cover
   Storage/    Encrypted database, Entry/Category models, EntryStore
-  Export/     JSON export
+  Export/     Zip export (JSON + audio)
+  Voice/      Recorder, player, on-device transcription, waveform
   Features/   Lock, EntryList, EntryEditor, Settings screens
 JournalTests/ Unit tests (Swift Testing)
 Packages/GRDB GRDB 7.11.1 configured for SQLCipher
