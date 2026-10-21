@@ -47,6 +47,8 @@ struct Entry: Identifiable, Hashable, Codable, Sendable {
     var contentHash: String
     var embedding: Data?
     var aiVersion: String?
+    /// The text changed since mood, summary, themes and categories were last worked out.
+    var needsAnalysis: Bool
 
     /// A new, unsaved typed entry for today.
     static func newTyped(on date: DayDate = .today, now: Date = .now) -> Entry {
@@ -59,8 +61,18 @@ struct Entry: Identifiable, Hashable, Codable, Sendable {
             moodScore: nil, moodLabel: nil, emotions: [], moodManual: false,
             primaryCategory: nil, secondaryCategories: [], categoriesManual: false,
             isJournal: nil, summary: nil, themes: [],
-            contentHash: contentHash(text: "", date: date), embedding: nil, aiVersion: nil
+            contentHash: contentHash(text: "", date: date), embedding: nil, aiVersion: nil,
+            needsAnalysis: true
         )
+    }
+
+    /// The text the model analyses: the accepted cleanup if there is one.
+    var analysisText: String {
+        (cleanedText ?? originalText).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var categories: [String] {
+        (primaryCategory.map { [$0] } ?? []) + secondaryCategories
     }
 
     /// The text the entry currently shows: the accepted cleanup or the original.
@@ -98,5 +110,19 @@ extension Entry: FetchableRecord, PersistableRecord {
     enum Columns {
         static let entryDate = Column("entry_date")
         static let createdAt = Column("created_at")
+        static let needsAnalysis = Column("needs_analysis")
+        static let id = Column("id")
     }
+
+    /// Columns the editor writes. Everything else (AI fields, manual overrides) is
+    /// written by its own code path, so a stale editor copy can't overwrite it.
+    static let editorColumns = [
+        "title", "entry_date", "date_source", "updated_at", "source", "original_text",
+        "cleaned_text", "show_cleaned", "audio_path", "audio_duration_s", "content_hash",
+    ]
+
+    static let analysisColumns = [
+        "mood_score", "mood_label", "emotions", "primary_category", "secondary_categories",
+        "is_journal", "summary", "themes", "ai_version", "needs_analysis",
+    ]
 }

@@ -70,7 +70,6 @@ final class EntryEditorModel {
     private var dateWasEdited = false
     private var source: Entry.Source
     private var recordingSegment: URL?
-    private var aiVersion: String?
     private var cleanupTask: Task<Void, Never>?
 
     init(
@@ -93,7 +92,6 @@ final class EntryEditorModel {
         self.source = entry.source
         self.cleanedText = entry.cleanedText
         self.showCleaned = entry.showCleaned
-        self.aiVersion = entry.aiVersion
     }
 
     var isNew: Bool { !isPersisted }
@@ -156,7 +154,6 @@ final class EntryEditorModel {
         updated.audioDurationS = audioDuration
         updated.cleanedText = cleanedText
         updated.showCleaned = isShowingCleaned
-        updated.aiVersion = aiVersion
         updated.contentHash = Entry.contentHash(text: text, date: updated.entryDate)
 
         guard updated != entry || !isPersisted else {
@@ -171,7 +168,7 @@ final class EntryEditorModel {
 
         updated.updatedAt = .now
         do {
-            try await store.save(updated)
+            try await store.saveFromEditor(updated, isNew: !isPersisted, textChanged: updated.analysisText != entry.analysisText)
             entry = updated
             isPersisted = true
             if pendingSave == nil { saveState = .saved }
@@ -304,9 +301,9 @@ final class EntryEditorModel {
     func acceptCleanup(_ cleaned: String, aiVersion: String) async {
         cleanedText = cleaned
         showCleaned = true
-        self.aiVersion = aiVersion
         cleanupReview = nil
         await flush()
+        try? await store.recordAIVersion(aiVersion, for: entry.id)
     }
 
     func discardCleanup() {

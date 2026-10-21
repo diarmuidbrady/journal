@@ -20,4 +20,26 @@ enum Prompts {
         <<<\(chunk)>>>
         """
     }
+
+    static let analysisVersion = "analysis-v1"
+
+    static func analysis(_ text: String, categories: [String]) -> String {
+        let list = categories.map { "\"\($0)\"" }.joined(separator: ", ")
+        return """
+            Read this journal entry and return JSON only:
+            {"mood_score": number from -1.0 (very negative) to 1.0 (very positive); 0 is neutral, and an entry that is mostly stressed, worried, sad, angry, uneasy or tired is below 0,
+             "mood_label": one word,
+             "emotions": up to 3 single words,
+             "summary": one or two sentences in the second person ("You..."),
+             "themes": up to 5 short lowercase tags,
+             "primary_category": exactly one of [\(list)],
+             "secondary_categories": up to 2 of [\(list)],
+             "suggested_category": a short new category name only if none fit, else null,
+             "is_journal": true if this reads like a personal journal entry, false if it is a list, recipe or reference note}
+            Base everything only on what the entry says.
+
+            Entry:
+            <<<\(text)>>>
+            """
+    }
 }

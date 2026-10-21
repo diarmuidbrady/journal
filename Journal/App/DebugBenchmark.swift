@@ -35,6 +35,9 @@ enum DebugBenchmark {
                 let seconds = Date.now.timeIntervalSince(start)
                 log("cleaned \(sample.count)→\(result.text.count) chars in \(seconds.formatted(.number.precision(.fractionLength(1))))s, ~\(Int(Double(result.text.count) / 4 / seconds)) tok/s, warnings \(result.warnings)")
                 print("BENCH output:\n\(result.text)")
+                start = .now
+                let analysis = try await Analyzer(model: model).analyze(sample, categories: Category.defaultNames)
+                log("analysed in \(Date.now.timeIntervalSince(start).formatted(.number.precision(.fractionLength(1))))s: \(analysis.moodScore) \(analysis.moodLabel) \(analysis.emotions) \(analysis.primaryCategory) \(analysis.secondaryCategories)")
                 await model.runner.unload()
                 log("unloaded")
                 exit(0)

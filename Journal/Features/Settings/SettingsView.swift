@@ -36,6 +36,12 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink("Categories") { CategoriesView(store: store) }
+                } footer: {
+                    Text("Edit your category list and review the model's suggestions.")
+                }
+
+                Section {
                     LabeledContent("Model", value: modelStore.spec.displayName)
                     aiModelRow
                 } header: {

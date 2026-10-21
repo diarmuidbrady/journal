@@ -56,7 +56,7 @@ struct CleanupEngineTests {
         #expect(model.prompts.count > 1)
         #expect(model.prompts.allSatisfy { $0.contains("Keep every fact, name, number, event and emotion. Do not summarise.") })
         #expect(!result.text.contains("um "))
-        #expect(result.aiVersion == "cleanup-v1;fake-model")
+        #expect(result.aiVersion == "cleanup-v1@fake-model")
     }
 
     @Test func tidyStripsThinkingAndPreamble() {
@@ -145,7 +145,7 @@ struct EditorCleanupTests {
         #expect(saved.cleanedText == "So I went to the Forty Foot, with Aoife. Edited.")
         #expect(saved.showCleaned)
         #expect(saved.displayText == saved.cleanedText)
-        #expect(saved.aiVersion == "cleanup-v1;fake-model")
+        #expect(saved.aiVersion == "cleanup-v1@fake-model")
 
         // Toggling to the original, and recordings appending to both versions.
         model.showCleaned = false

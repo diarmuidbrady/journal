@@ -32,7 +32,7 @@ struct CleanupEngine: Sendable {
         return CleanupResult(
             text: result,
             warnings: FactCheck.warnings(original: text, cleaned: result),
-            aiVersion: "\(Prompts.cleanupVersion);\(model.identifier)"
+            aiVersion: "\(Prompts.cleanupVersion)@\(model.identifier)"
         )
     }
 

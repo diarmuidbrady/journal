@@ -81,6 +81,15 @@ final class AppDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v2: needs_analysis") { db in
+            // Set when an entry's text changes; cleared once mood, summary, themes and
+            // categories are filled in. Lets the background pass resume after a restart.
+            try db.alter(table: "entries") { t in
+                t.add(column: "needs_analysis", .boolean).notNull().defaults(to: true)
+            }
+            try db.create(index: "entries_on_needs_analysis", on: "entries", columns: ["needs_analysis"])
+        }
+
         return migrator
     }
 }

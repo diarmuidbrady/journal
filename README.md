@@ -2,10 +2,11 @@
 
 A private, single-user journal for iPhone. Everything is processed and stored on the phone, in an encrypted database unlocked with Face ID. The build brief is [SPEC.md](SPEC.md).
 
-**Status:** phases 1–3 are built:
+**Status:** phases 1–4 are built:
 - **Vault:** app lock, encrypted database, typed entries, entry list, export.
 - **Voice:** recording with pause/resume and a waveform, and on-device transcription.
 - **Cleanup:** on-device AI cleanup with a review diff, using Qwen3.5-4B through llama.cpp.
+- **Mood and categories:** background mood, summary, themes and categories; the mood calendar; the category filter; manual overrides.
 
 ## Install on the iPhone
 
@@ -48,7 +49,10 @@ The download URL and checksum are in `Journal/AI/ModelSpec.swift`.
 - Debug builds launched with `-seed-sample-entries` fill an empty journal with invented entries, for trying the UI in the simulator.
 - Debug builds launched with `-ai-benchmark` load the model, clean one invented entry, print timings and free memory, then exit. They never open the journal. Run it on the phone with: `xcrun devicectl device process launch --device <identifier> --console com.diarmuidbrady.journal -ai-benchmark`
 - **The AI model doesn't run in the Simulator:** llama.cpp ships no Simulator build. The app links it for device builds only, and in the Simulator, cleanup reports "not available".
-- **Cleanup quality check:** run `Tools/cleanup-quality.sh path/to/Qwen3.5-4B-Q4_K_M.gguf` on a Mac. It runs the real cleanup code over `JournalTests/Fixtures/cleanup-samples.json`.
+- **Model checks on a Mac:** these run the app's real AI code with llama.cpp over `JournalTests/Fixtures/cleanup-samples.json`.
+  - `Tools/cleanup-quality.sh path/to/Qwen3.5-4B-Q4_K_M.gguf` checks that cleanup keeps names, numbers and negations.
+  - `Tools/analysis-check.sh path/to/Qwen3.5-4B-Q4_K_M.gguf` prints the mood, categories and summary for each sample.
+- `-open-tab mood` (debug builds only) starts on the Mood tab.
 - Dependencies:
   - GRDB with SQLCipher, copied into `Packages/GRDB` (see [VENDORED.md](Packages/GRDB/VENDORED.md)).
   - llama.cpp's prebuilt XCFramework, pinned in `Packages/LlamaCpp`.
@@ -64,7 +68,8 @@ Journal/
   Export/     Zip export (JSON + audio)
   Voice/      Recorder, player, on-device transcription, waveform
   AI/         TextModel, llama.cpp runner, model download, cleanup, diff
-Tools/        Cleanup quality check (runs on a Mac)
+  Features/Mood/  Mood calendar, colour scale, month summary
+Tools/        Model checks that run on a Mac (cleanup quality, analysis)
   Features/   Lock, EntryList, EntryEditor, Settings screens
 JournalTests/ Unit tests (Swift Testing)
 Packages/     GRDB (with SQLCipher), llama.cpp

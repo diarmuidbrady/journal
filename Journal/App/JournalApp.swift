@@ -5,6 +5,7 @@ struct JournalApp: App {
     @State private var vault = Vault()
     @State private var speechModel = SpeechModel()
     @State private var modelStore = ModelStore()
+    @State private var analysisQueue = AnalysisQueue()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -19,6 +20,7 @@ struct JournalApp: App {
                 .environment(vault)
                 .environment(speechModel)
                 .environment(modelStore)
+                .environment(analysisQueue)
                 .task { await modelStore.refresh() }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -41,7 +43,7 @@ struct RootView: View {
             case .locked:
                 LockView()
             case .unlocked(let store):
-                EntryListView(store: store)
+                MainTabs(store: store)
             }
 
             // Hides journal content in the app switcher and while Face ID is showing.
@@ -56,6 +58,50 @@ struct RootView: View {
         DebugBenchmark.isRequested
         #else
         false
+        #endif
+    }
+}
+
+/// Journal and Mood tabs, plus the background analysis pass while unlocked.
+struct MainTabs: View {
+    let store: EntryStore
+
+    @Environment(ModelStore.self) private var modelStore
+    @Environment(AnalysisQueue.self) private var analysisQueue
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var tab = MainTabs.initialTab
+
+    /// The pass runs only when all of these hold; any change restarts or stops it.
+    private struct AnalysisConditions: Hashable {
+        var active: Bool
+        var modelReady: Bool
+        var editorClosed: Bool
+    }
+
+    var body: some View {
+        TabView(selection: $tab) {
+            Tab("Journal", systemImage: "book", value: "journal") {
+                EntryListView(store: store)
+            }
+            Tab("Mood", systemImage: "calendar", value: "mood") {
+                MoodCalendarView(store: store)
+            }
+        }
+        .task(id: AnalysisConditions(
+            active: scenePhase == .active,
+            modelReady: modelStore.status == .ready,
+            editorClosed: analysisQueue.openEditors == 0
+        )) {
+            guard scenePhase == .active, analysisQueue.openEditors == 0, let model = modelStore.textModel else { return }
+            await analysisQueue.run(store: store, model: model)
+        }
+    }
+
+    private static var initialTab: String {
+        #if DEBUG
+        DebugSampleData.initialTab ?? "journal"
+        #else
+        "journal"
         #endif
     }
 }

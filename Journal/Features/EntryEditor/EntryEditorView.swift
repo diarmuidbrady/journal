@@ -4,6 +4,7 @@ struct EntryEditorView: View {
     @State private var model: EntryEditorModel
     @Environment(SpeechModel.self) private var speechModel
     @Environment(ModelStore.self) private var modelStore
+    @Environment(AnalysisQueue.self) private var analysisQueue
     @Environment(\.scenePhase) private var scenePhase
     @FocusState private var bodyFocused: Bool
     @State private var confirmingModelDownload = false
@@ -12,7 +13,10 @@ struct EntryEditorView: View {
     @State private var confirmingRecleanup = false
     @State private var showingModelNeeded = false
 
+    private let store: EntryStore
+
     init(store: EntryStore, entry: Entry, isNew: Bool) {
+        self.store = store
         _model = State(initialValue: EntryEditorModel(store: store, entry: entry, isPersisted: !isNew))
     }
 
@@ -24,6 +28,10 @@ struct EntryEditorView: View {
 
             DatePicker("Date", selection: $model.date, in: ...Date.now, displayedComponents: .date)
                 .labelsHidden()
+
+            if model.isPersisted {
+                EntryInsightsView(store: store, entryID: model.entry.id)
+            }
 
             if let audioURL = model.audioURL {
                 RecordingRow(
@@ -76,11 +84,15 @@ struct EntryEditorView: View {
         }
         .onAppear {
             if model.isNew { bodyFocused = true }
+            // Background analysis waits while an entry is open, so it never competes
+            // with typing, recording or cleanup, and runs once the entry is finished.
+            analysisQueue.editorOpened()
         }
         .task { await speechModel.refresh() }
         .onDisappear {
             Task {
                 if model.isRecording { await model.stopRecording() } else { await model.flush() }
+                analysisQueue.editorClosed()
             }
         }
         .onChange(of: scenePhase) { _, phase in

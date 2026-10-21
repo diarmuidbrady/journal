@@ -97,7 +97,7 @@ Everything is processed inside the phone; the two optional (dashed) links carry 
   - Llama 3.2 3B, older than the rest
 - **Quality check:** both finalists were run on the 10 invented test entries with the real cleanup code (`Tools/cleanup-quality.sh`).
   - **Ministral** rewrote in a formal voice and changed meaning. For example, "I didn't think I'd last two minutes" became "I had expected to struggle for only two minutes".
-  - **Qwen** kept 71 of 77 must-keep names, numbers and negations. Four of the six misses are format changes ("3:15" for "three fifteen", "2 pm", "Dr.", "not looking"). The other two are small slips ("haven't" became "hadn't"; "I don't know" was dropped), which the review screen flags.
+  - **Qwen** kept 69–71 of 77 must-keep names, numbers and negations (it varies a little between runs at temperature 0.2). Four of the six misses are format changes ("3:15" for "three fifteen", "2 pm", "Dr.", "not looking"). The other two are small slips ("haven't" became "hadn't"; "I don't know" was dropped), which the review screen flags.
 - **On the iPhone 15:**
 
   | Step | Result |
@@ -218,6 +218,46 @@ Six features, built in the order listed; importing old journals has its own sect
 - Tap a day to open its entries. Swipe between months. A one-line monthly summary sits under the grid (entries written, average mood, most frequent emotion).
 - I can override any entry's mood by hand; a manual value always wins over the model's.
 
+**As built in phase 4 (2026-10-21):**
+
+*When analysis runs*
+- "On save" means once the entry is finished. A background pass analyses entries flagged `needs_analysis`, newest first, one at a time.
+- A change to the entry's text sets the flag; a title change doesn't.
+- The pass only runs while the app is open and unlocked, the model is ready and **no entry is open in the editor**, so it never competes with typing, recording or cleanup.
+- The flag lives in the database, so the pass resumes after a restart. Existing entries were flagged by the v2 migration.
+- If the text changed while an analysis was running, that result is thrown away and the entry stays queued.
+- A failed entry is skipped until the app restarts.
+
+*How the result is produced*
+- The prompt is the spec's, as `analysis-v1`, with one addition for calibration: "0 is neutral, and an entry that is mostly stressed, worried, sad, angry, uneasy or tired is below 0". Without it, the model scored "uneasy" and "tired" entries positive.
+- Output is constrained by a llama.cpp GBNF grammar:
+  - it is always valid JSON
+  - the categories can only be names from the list
+  - the score stays within −1…1
+  - there's at least one emotion and one theme
+- It analyses the cleaned text when there is one. Entries over 6,000 characters are cut to their first 4,000 and last 1,800.
+- **Measured:** about 30 s per entry on the iPhone 15, mostly from the length of the JSON output.
+
+*Storing it*
+- Each writer saves only its own columns, so the editor's stale copy can never overwrite the AI fields, or the reverse.
+- Manual mood and categories are kept when the model runs again. "Let the model…" in the entry hands them back.
+- Log entries (`source_kind = log`) get no mood.
+- `ai_version` now records each prompt separately, e.g. `analysis-v1@<model>;cleanup-v1@<model>`.
+
+*Calendar and colours*
+- The calendar is a Mood tab:
+  - The week starts on the phone's first weekday (Monday in Ireland).
+  - Days with no entries are outlined. Scored days are filled with the average mood.
+  - Days whose entries aren't scored yet have a dashed outline.
+  - There's one dot per entry (up to 4) when a day has more than one, and a ring marks today.
+  - You can swipe between months, but not past the current one.
+  - Tapping a day lists its entries.
+- **Palette:** muted red → grey → **teal-green**, rather than pure green. A plain red/green pair failed the colour-blind check (deuteranopia ΔE 3.4); red/teal passes (ΔE about 10).
+  - Light mode: `#C4553A` / `#DCDAD5` / `#0F9480`.
+  - Dark mode: `#D4664C` / `#4A4945` / `#22A28C`.
+  - There are four OKLab-interpolated steps per side, and a legend under the grid.
+- The summary line shows the number of entries, the average mood, and the most frequent emotion, but only if one repeats.
+
 ### 6. Categories
 
 - Each entry gets one primary category and up to two secondary ones, chosen by the model from my category list, in the same pass as mood (see Prompts).
@@ -226,6 +266,17 @@ Six features, built in the order listed; importing old journals has its own sect
 - I can change any entry's categories by hand; manual choices always win, as with mood.
 - The entry list and "Ask the journal" can filter by category ("What patterns show up in my Work entries this year?").
 - Editing the category list offers to re-categorise past entries in the background.
+
+**As built in phase 4:**
+
+*Managing the list (Settings → Categories)*
+- Add, rename (entries follow), delete (removed from entries too) and reorder. Names are 1–30 letters, digits, spaces and `& ' -`.
+- Model suggestions appear under "Suggested by the model" with Add and Dismiss buttons. A dismissed suggestion is kept as `status = dismissed`, so it isn't suggested again.
+- After any change, the app offers to re-categorise. That re-queues every entry without manual categories, and the whole analysis runs again.
+
+*In the journal*
+- The entry list has a category filter menu. Each row shows a mood dot, the main category and the mood label.
+- In an entry, a row shows mood, categories and summary. Tapping it lets you set the mood (slider plus one-word label) or categories by hand, marked with a hand icon.
 
 ## Import
 
@@ -239,7 +290,7 @@ Old journals come in through one Import screen, are parsed on the phone, and bec
 2. Show a preview list of every candidate with checkboxes, editable title and date, and flags: no date found, possible duplicate, probably not a journal entry (a shopping list, a recipe).
 3. Bulk tools in the preview: filter by folder, select or deselect all, set one date for many, and split one long note into several entries at its date headings (for notes like "Journal 2023").
 4. Import the selected candidates. Original text is stored untouched; cleanup is never run automatically on imports.
-5. Run a background pass for mood, summary, themes, categories and embeddings, with a progress bar. It must resume if the app closes. Process newest entries first, and prefer running while charging.
+5. Run a background pass for mood, summary, themes, categories and embeddings, with a progress bar. It must resume if the app closes. Process newest entries first, and prefer running while charging. *(Phase 4 built the resumable, newest-first pass. At about 30 s per entry on the iPhone 15, a 500-entry import takes about 4 hours of the app being open. Phase 6 should look at iOS background processing while charging, and may need a faster or shorter analysis for imports.)*
 6. Record each import as a batch, so a whole import can be undone in one tap.
 
 **Dates.** Try these in order and record which one won (`date_source`): a date property or front-matter field; a date in the folder path, title or file name; a date in the first lines of the body; file timestamps, only if a real sample export shows they keep the original note date; otherwise ask me in the preview. Ambiguous numeric dates such as 03/04/2024 default to day-first (I'm in Ireland), with a setting to switch.
@@ -346,7 +397,9 @@ One encrypted SQLite database on the phone. Six tables; derived AI fields live o
 
 **import_batches:** id, created_at, source, file_name, entry_count, property_mapping (JSON; reused when the same database is imported again).
 
-**categories:** name, sort_order, status (`active` / `pending`), created_at. Edited in settings; model suggestions wait here with status `pending` until approved.
+**categories:** name, sort_order, status (`active` / `pending` / `dismissed`), created_at. Edited in settings; model suggestions wait here with status `pending` until approved.
+
+**entries.needs_analysis** (bool, added in phase 4): true when the text changed since mood, summary, themes and categories were last worked out.
 
 **settings:** key, value. Holds lock timeout, chosen model, backup on/off, last backup time.
 
@@ -379,7 +432,7 @@ Text:
 
 ```
 Read this journal entry and return JSON only:
-{"mood_score": number from -1.0 (very negative) to 1.0 (very positive),
+{"mood_score": number from -1.0 (very negative) to 1.0 (very positive); 0 is neutral, and an entry that is mostly stressed, worried, sad, angry, uneasy or tired is below 0,
  "mood_label": one word,
  "emotions": up to 3 single words,
  "summary": one or two sentences in the second person ("You..."),
@@ -441,7 +494,7 @@ Build in seven phases; each ends with something usable on the phone.
 1. **Vault:** app lock, encrypted database, typed entries, entry list, export. *(Built 2026-10-21.)*
 2. **Voice:** recording and on-device transcription. *(Built 2026-10-21.)*
 3. **Cleanup:** model runtime behind `TextModel`, cleanup prompt, diff view. *(Built 2026-10-21.)*
-4. **Mood and categories:** mood, summary, themes and categories on save; month calendar; category filter.
+4. **Mood and categories:** mood, summary, themes and categories on save; month calendar; category filter. *(Built 2026-10-21.)*
 5. **Ask:** embeddings, retrieval, Q&A screen, saved reflections.
 6. **Import:** text/Markdown files first, then Notion, then Apple Notes, then photos with text recognition.
 7. **Backup (optional):** encrypted export to a cloud drive, or Supabase blob sync.

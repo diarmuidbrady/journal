@@ -8,6 +8,7 @@ enum LlamaError: LocalizedError {
     case loadFailed
     case contextFailed
     case templateFailed
+    case grammarInvalid
     case promptTooLong(tokens: Int, limit: Int)
     case decodeFailed(Int32)
 
@@ -17,6 +18,7 @@ enum LlamaError: LocalizedError {
         case .loadFailed: "The AI model couldn't be loaded. There may not be enough free memory; close other apps and try again."
         case .contextFailed: "The AI model couldn't start. There may not be enough free memory."
         case .templateFailed: "The prompt couldn't be prepared for this model."
+        case .grammarInvalid: "The output format for the model is invalid."
         case .promptTooLong(let tokens, let limit): "The text is too long for the model (\(tokens) of \(limit) tokens)."
         case .decodeFailed(let code): "The AI model stopped unexpectedly (code \(code))."
         }
@@ -113,6 +115,12 @@ actor LlamaRunner {
 
         let sampler = llama_sampler_chain_init(llama_sampler_chain_default_params())
         defer { llama_sampler_free(sampler) }
+        if let grammar = options.grammar {
+            guard let grammarSampler = llama_sampler_init_grammar(vocab, grammar, "root") else {
+                throw LlamaError.grammarInvalid
+            }
+            llama_sampler_chain_add(sampler, grammarSampler)
+        }
         if options.temperature <= 0 {
             llama_sampler_chain_add(sampler, llama_sampler_init_greedy())
         } else {

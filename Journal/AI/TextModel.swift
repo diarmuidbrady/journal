@@ -12,6 +12,8 @@ struct ChatMessage: Sendable {
 struct GenerationOptions: Sendable {
     var maxTokens: Int
     var temperature: Float
+    /// A GBNF grammar the output must match (constrained output), if the runtime supports it.
+    var grammar: String? = nil
 }
 
 /// An on-device text model. Implementations can be swapped (SPEC.md, Model choice):
